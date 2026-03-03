@@ -1,0 +1,76 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Phenomenon",
+  "projectDescription": "A fast 2kB low-level WebGL API for high-performance particle rendering",
+  "theme": "aspen",
+  "primaryColor": "#FF6B35",
+  "lightColor": "#FF8C61",
+  "darkColor": "#E64A19",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/renderer",
+          "concepts/instances",
+          "concepts/shaders",
+          "concepts/attributes",
+          "concepts/uniforms"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/renderer",
+          "api/instance",
+          "api/methods"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/particles",
+          "guides/geometry",
+          "guides/performance",
+          "guides/dynamic-attributes"
+        ]
+      },
+      {
+        "group": "Examples",
+        "pages": [
+          "examples/overview",
+          "examples/basic-particles",
+          "examples/transitions",
+          "examples/shapes"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "GPU-based particle rendering for millions of particles",
+    "Low-level WebGL API with 2kB footprint",
+    "Dynamic attribute switching and instance management",
+    "Custom shader support with vertex and fragment shaders",
+    "Zero dependencies with TypeScript support",
+    "Helper functions for common rendering tasks"
+  ],
+  "publicApiSurface": [
+    "Renderer(options)",
+    "renderer.add(key, settings)",
+    "renderer.remove(key)",
+    "renderer.resize()",
+    "renderer.toggle(shouldRender)",
+    "renderer.destroy()",
+    "instance.prepareAttribute(attribute)",
+    "instance.prepareBuffer(attribute)",
+    "instance.render(renderUniforms)"
+  ]
+}
