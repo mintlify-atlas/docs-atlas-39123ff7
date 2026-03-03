@@ -1,0 +1,461 @@
+---
+title: Working with Geometry
+description: Render 3D models and complex shapes with Phenomenon's geometry system
+---
+
+While Phenomenon is optimized for particles, it can also render 3D geometry using triangles, lines, and other WebGL primitives.
+
+## Understanding Geometry
+
+Geometry in Phenomenon consists of vertices and optional normals. The library automatically creates the `aPosition` and `aNormal` attributes from your geometry data.
+
+```javascript
+const geometry = {
+  vertices: [
+    { x: 0, y: 1, z: 0 },
+    { x: -1, y: -1, z: 0 },
+    { x: 1, y: -1, z: 0 }
+  ],
+  normal: [
+    { x: 0, y: 0, z: 1 },
+    { x: 0, y: 0, z: 1 },
+    { x: 0, y: 0, z: 1 }
+  ]
+};
+```
+
+<Note>
+  When `geometry.vertices` is provided, Phenomenon automatically creates an `aPosition` attribute. Similarly, `geometry.normal` creates an `aNormal` attribute.
+</Note>
+
+## Render Modes
+
+Phenomenon supports different WebGL drawing modes:
+
+| Mode | Value | Description |
+|------|-------|-------------|
+| POINTS | 0 | Individual points (particles) |
+| LINES | 1 | Lines between pairs of vertices |
+| LINE_LOOP | 2 | Connected line loop |
+| LINE_STRIP | 3 | Connected line strip |
+| TRIANGLES | 4 | Triangular faces |
+| TRIANGLE_STRIP | 5 | Connected triangle strip |
+| TRIANGLE_FAN | 6 | Triangle fan from first vertex |
+
+## Basic Triangle
+
+Create a simple colored triangle using triangle mode.
+
+```javascript
+import Phenomenon from 'phenomenon';
+
+const renderer = new Phenomenon({
+  settings: {
+    clearColor: [0.1, 0.1, 0.1, 1],
+  }
+});
+
+renderer.add('triangle', {
+  geometry: {
+    vertices: [
+      { x: 0, y: 0.5, z: 0 },
+      { x: -0.5, y: -0.5, z: 0 },
+      { x: 0.5, y: -0.5, z: 0 }
+    ]
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    
+    void main() {
+      gl_FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    }
+  `,
+  mode: 4 // TRIANGLES
+});
+```
+
+## Cube Geometry
+
+Create a complete cube with proper face definitions.
+
+<Steps>
+  <Step title="Define cube vertices">
+    Create all 24 vertices (4 per face) for proper normals:
+
+    ```javascript
+    const cubeGeometry = {
+      vertices: [
+        // Front face
+        { x: -0.5, y: -0.5, z: 0.5 },
+        { x: 0.5, y: -0.5, z: 0.5 },
+        { x: 0.5, y: 0.5, z: 0.5 },
+        { x: -0.5, y: 0.5, z: 0.5 },
+        // Back face
+        { x: -0.5, y: -0.5, z: -0.5 },
+        { x: -0.5, y: 0.5, z: -0.5 },
+        { x: 0.5, y: 0.5, z: -0.5 },
+        { x: 0.5, y: -0.5, z: -0.5 },
+        // Top face
+        { x: -0.5, y: 0.5, z: -0.5 },
+        { x: -0.5, y: 0.5, z: 0.5 },
+        { x: 0.5, y: 0.5, z: 0.5 },
+        { x: 0.5, y: 0.5, z: -0.5 },
+        // Bottom face
+        { x: -0.5, y: -0.5, z: -0.5 },
+        { x: 0.5, y: -0.5, z: -0.5 },
+        { x: 0.5, y: -0.5, z: 0.5 },
+        { x: -0.5, y: -0.5, z: 0.5 },
+        // Right face
+        { x: 0.5, y: -0.5, z: -0.5 },
+        { x: 0.5, y: 0.5, z: -0.5 },
+        { x: 0.5, y: 0.5, z: 0.5 },
+        { x: 0.5, y: -0.5, z: 0.5 },
+        // Left face
+        { x: -0.5, y: -0.5, z: -0.5 },
+        { x: -0.5, y: -0.5, z: 0.5 },
+        { x: -0.5, y: 0.5, z: 0.5 },
+        { x: -0.5, y: 0.5, z: -0.5 }
+      ],
+      normal: [
+        // Front
+        { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 },
+        { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 },
+        // Back
+        { x: 0, y: 0, z: -1 }, { x: 0, y: 0, z: -1 },
+        { x: 0, y: 0, z: -1 }, { x: 0, y: 0, z: -1 },
+        // Top
+        { x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 0 },
+        { x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 0 },
+        // Bottom
+        { x: 0, y: -1, z: 0 }, { x: 0, y: -1, z: 0 },
+        { x: 0, y: -1, z: 0 }, { x: 0, y: -1, z: 0 },
+        // Right
+        { x: 1, y: 0, z: 0 }, { x: 1, y: 0, z: 0 },
+        { x: 1, y: 0, z: 0 }, { x: 1, y: 0, z: 0 },
+        // Left
+        { x: -1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 },
+        { x: -1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }
+      ]
+    };
+    ```
+  </Step>
+
+  <Step title="Create cube with triangle strip">
+    Use `TRIANGLE_STRIP` mode for efficient rendering:
+
+    ```javascript
+    renderer.add('cube', {
+      geometry: cubeGeometry,
+      vertex: `
+        attribute vec3 aPosition;
+        attribute vec3 aNormal;
+        
+        varying vec3 vNormal;
+        
+        uniform mat4 uProjectionMatrix;
+        uniform mat4 uModelMatrix;
+        uniform mat4 uViewMatrix;
+        uniform float uTime;
+        
+        void main() {
+          vNormal = aNormal;
+          
+          // Rotate cube
+          mat3 rotY = mat3(
+            cos(uTime), 0, sin(uTime),
+            0, 1, 0,
+            -sin(uTime), 0, cos(uTime)
+          );
+          
+          mat3 rotX = mat3(
+            1, 0, 0,
+            0, cos(uTime * 0.7), -sin(uTime * 0.7),
+            0, sin(uTime * 0.7), cos(uTime * 0.7)
+          );
+          
+          vec3 pos = rotX * rotY * aPosition;
+          gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragment: `
+        precision mediump float;
+        varying vec3 vNormal;
+        
+        void main() {
+          vec3 light = normalize(vec3(0.5, 1.0, 0.5));
+          float intensity = dot(vNormal, light) * 0.5 + 0.5;
+          gl_FragColor = vec4(vec3(intensity), 1.0);
+        }
+      `,
+      mode: 5, // TRIANGLE_STRIP
+      uniforms: {
+        uTime: { type: 'float', value: 0 }
+      },
+      onRender: (instance) => {
+        instance.uniforms.uTime.value += 0.016;
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use `TRIANGLE_STRIP` (mode 5) instead of `TRIANGLES` (mode 4) when possible to reduce the number of vertices needed.
+</Tip>
+
+## Multiple Instances with Multiplier
+
+The `multiplier` parameter works with geometry too, creating multiple copies of the same model.
+
+```javascript
+renderer.add('multiple-cubes', {
+  geometry: cubeGeometry,
+  multiplier: 10,
+  attributes: [
+    {
+      name: 'aInstancePosition',
+      size: 3,
+      data: (i, total) => [
+        ((i % 5) - 2) * 1.5,
+        (Math.floor(i / 5) - 1) * 1.5,
+        0
+      ]
+    }
+  ],
+  modifiers: {
+    aPosition: (data, i, l, instance) => {
+      // Get which instance we're in
+      const instanceIndex = Math.floor(i / instance.geometry.vertices.length);
+      const offset = instanceIndex * 3;
+      
+      // Get the instance position
+      const instanceData = instance.attributes.find(a => a.name === 'aInstancePosition').data;
+      const posOffset = instanceData[offset + l];
+      
+      // Apply offset to vertex
+      return instance.geometry.vertices[i % instance.geometry.vertices.length][['x','y','z'][l]] + posOffset;
+    }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aNormal;
+    
+    varying vec3 vNormal;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vNormal = aNormal;
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    varying vec3 vNormal;
+    
+    void main() {
+      vec3 light = normalize(vec3(0.5, 1.0, 0.5));
+      float intensity = dot(vNormal, light) * 0.5 + 0.5;
+      gl_FragColor = vec4(vec3(intensity), 1.0);
+    }
+  `,
+  mode: 5
+});
+```
+
+## Wireframe Mode
+
+Create wireframe effects using line modes.
+
+```javascript
+renderer.add('wireframe-cube', {
+  geometry: {
+    vertices: [
+      // Draw lines for each edge
+      { x: -0.5, y: -0.5, z: -0.5 }, { x: 0.5, y: -0.5, z: -0.5 },
+      { x: 0.5, y: -0.5, z: -0.5 }, { x: 0.5, y: 0.5, z: -0.5 },
+      { x: 0.5, y: 0.5, z: -0.5 }, { x: -0.5, y: 0.5, z: -0.5 },
+      { x: -0.5, y: 0.5, z: -0.5 }, { x: -0.5, y: -0.5, z: -0.5 },
+      
+      { x: -0.5, y: -0.5, z: 0.5 }, { x: 0.5, y: -0.5, z: 0.5 },
+      { x: 0.5, y: -0.5, z: 0.5 }, { x: 0.5, y: 0.5, z: 0.5 },
+      { x: 0.5, y: 0.5, z: 0.5 }, { x: -0.5, y: 0.5, z: 0.5 },
+      { x: -0.5, y: 0.5, z: 0.5 }, { x: -0.5, y: -0.5, z: 0.5 },
+      
+      { x: -0.5, y: -0.5, z: -0.5 }, { x: -0.5, y: -0.5, z: 0.5 },
+      { x: 0.5, y: -0.5, z: -0.5 }, { x: 0.5, y: -0.5, z: 0.5 },
+      { x: 0.5, y: 0.5, z: -0.5 }, { x: 0.5, y: 0.5, z: 0.5 },
+      { x: -0.5, y: 0.5, z: -0.5 }, { x: -0.5, y: 0.5, z: 0.5 }
+    ]
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    uniform float uTime;
+    
+    void main() {
+      mat3 rotY = mat3(
+        cos(uTime), 0, sin(uTime),
+        0, 1, 0,
+        -sin(uTime), 0, cos(uTime)
+      );
+      
+      vec3 pos = rotY * aPosition;
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    
+    void main() {
+      gl_FragColor = vec4(0.0, 1.0, 1.0, 1.0);
+    }
+  `,
+  mode: 1, // LINES
+  uniforms: {
+    uTime: { type: 'float', value: 0 }
+  },
+  onRender: (instance) => {
+    instance.uniforms.uTime.value += 0.016;
+  }
+});
+```
+
+## Parametric Shapes
+
+Generate complex shapes using mathematical functions.
+
+```javascript
+function createSphere(radius, segments) {
+  const vertices = [];
+  const normals = [];
+  
+  for (let lat = 0; lat <= segments; lat++) {
+    const theta = lat * Math.PI / segments;
+    const sinTheta = Math.sin(theta);
+    const cosTheta = Math.cos(theta);
+    
+    for (let lon = 0; lon <= segments; lon++) {
+      const phi = lon * 2 * Math.PI / segments;
+      const sinPhi = Math.sin(phi);
+      const cosPhi = Math.cos(phi);
+      
+      const x = cosPhi * sinTheta;
+      const y = cosTheta;
+      const z = sinPhi * sinTheta;
+      
+      vertices.push({
+        x: radius * x,
+        y: radius * y,
+        z: radius * z
+      });
+      
+      normals.push({ x, y, z });
+    }
+  }
+  
+  return { vertices, normal: normals };
+}
+
+renderer.add('sphere', {
+  geometry: createSphere(0.5, 32),
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aNormal;
+    
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vNormal = aNormal;
+      vPosition = aPosition;
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    
+    void main() {
+      vec3 light = normalize(vec3(1.0, 1.0, 1.0));
+      float diffuse = max(dot(vNormal, light), 0.0);
+      float ambient = 0.3;
+      
+      vec3 color = vec3(0.8, 0.3, 0.5);
+      vec3 finalColor = color * (ambient + diffuse);
+      
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `,
+  mode: 5 // TRIANGLE_STRIP
+});
+```
+
+<Warning>
+  Complex geometry with thousands of vertices can impact performance. Consider using simpler shapes or instancing for better performance.
+</Warning>
+
+## Geometry with Modifiers
+
+Use the `modifiers` parameter to transform geometry data during initialization.
+
+```javascript
+renderer.add('modified-geometry', {
+  geometry: {
+    vertices: [
+      { x: 0, y: 0.5, z: 0 },
+      { x: -0.5, y: -0.5, z: 0 },
+      { x: 0.5, y: -0.5, z: 0 }
+    ]
+  },
+  modifiers: {
+    aPosition: (data, vertexIndex, component) => {
+      const vertex = this.geometry.vertices[vertexIndex];
+      const value = vertex[['x', 'y', 'z'][component]];
+      
+      // Scale up the geometry
+      return value * 2.0;
+    }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    }
+  `,
+  mode: 4
+});
+```

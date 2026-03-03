@@ -1,0 +1,125 @@
+---
+title: Installation
+description: Install Phenomenon using your preferred package manager
+---
+
+# Installation
+
+Phenomenon is available as an npm package and can be installed using any modern JavaScript package manager.
+
+## Package Managers
+
+<Steps>
+  <Step title="Install the package">
+    Choose your preferred package manager and run the installation command:
+
+    <CodeGroup>
+      ```bash npm
+      npm install phenomenon
+      ```
+
+      ```bash yarn
+      yarn add phenomenon
+      ```
+
+      ```bash pnpm
+      pnpm add phenomenon
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Import into your project">
+    Import Phenomenon as an ES module:
+
+    ```javascript
+    import Phenomenon from 'phenomenon';
+    ```
+
+    <Note>
+      Phenomenon is written in TypeScript and includes full type definitions out of the box.
+    </Note>
+  </Step>
+
+  <Step title="Set up your canvas">
+    Add a canvas element to your HTML:
+
+    ```html
+    <canvas id="canvas"></canvas>
+    ```
+
+    Style it to fill the viewport:
+
+    ```css
+    canvas {
+      width: 100%;
+      height: 100vh;
+      display: block;
+    }
+    ```
+  </Step>
+</Steps>
+
+## CDN Usage
+
+You can also use Phenomenon directly from a CDN without any build step:
+
+<CodeGroup>
+  ```html unpkg
+  <script src="https://unpkg.com/phenomenon@1.6.0/dist/phenomenon.umd.js"></script>
+  <script>
+    const phenomenon = new Phenomenon();
+  </script>
+  ```
+
+  ```html jsdelivr
+  <script src="https://cdn.jsdelivr.net/npm/phenomenon@1.6.0/dist/phenomenon.umd.js"></script>
+  <script>
+    const phenomenon = new Phenomenon();
+  </script>
+  ```
+</CodeGroup>
+
+## Package Details
+
+The Phenomenon package includes:
+
+- **ES Module** (`phenomenon.mjs`) - For modern bundlers
+- **UMD Bundle** (`phenomenon.umd.js`) - For browsers and Node.js
+- **TypeScript Definitions** (`index.d.ts`) - Full type support
+- **Source Maps** - For debugging
+
+<Tip>
+  The package is only **2kB gzipped** and has **zero dependencies**, making it perfect for performance-critical applications.
+</Tip>
+
+## Browser Support
+
+Phenomenon requires WebGL support. It works in:
+
+- Chrome 56+
+- Firefox 51+
+- Safari 11+
+- Edge 79+
+- Mobile browsers with WebGL support
+
+<Warning>
+  Internet Explorer is not supported as it lacks proper WebGL and ES6 support.
+</Warning>
+
+## WebGL 2.0
+
+To use WebGL 2.0 instead of WebGL 1.0, specify the context type when creating the renderer:
+
+```javascript
+const phenomenon = new Phenomenon({
+  contextType: 'webgl2'
+});
+```
+
+## Next Steps
+
+Now that you have Phenomenon installed, let's create your first particle system:
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Build a working particle example in minutes
+</Card>

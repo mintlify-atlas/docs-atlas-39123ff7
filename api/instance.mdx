@@ -1,0 +1,377 @@
+---
+title: Instance
+description: The Instance class represents a single renderable object with its own shaders, geometry, and attributes
+---
+
+## Constructor
+
+Creates a new Instance with shaders, geometry, and attributes.
+
+```typescript
+new Instance(props: InstanceProps)
+```
+
+### Parameters
+
+<ParamField path="props" type="InstanceProps" required>
+  Configuration object for the instance
+  
+  <Expandable title="properties">
+    <ParamField path="vertex" type="string" optional>
+      GLSL vertex shader source code.
+    </ParamField>
+    
+    <ParamField path="fragment" type="string" optional>
+      GLSL fragment shader source code.
+    </ParamField>
+    
+    <ParamField path="uniforms" type="{ [key: string]: UniformProps }" default="{}">
+      Uniform variables to pass to shaders. Each uniform requires:
+      - `type`: Uniform type (`'float'`, `'vec2'`, `'vec3'`, `'vec4'`, `'mat2'`, `'mat3'`, `'mat4'`)
+      - `value`: Array of number values
+    </ParamField>
+    
+    <ParamField path="geometry" type="GeometryProps" optional default="{ vertices: [{ x: 0, y: 0, z: 0 }] }">
+      Geometry data for the instance.
+      
+      <Expandable title="properties">
+        <ParamField path="vertices" type="Array<Array<object>>" optional>
+          Array of vertex positions. Each vertex should have `x`, `y`, and `z` properties.
+        </ParamField>
+        
+        <ParamField path="normal" type="Array<Array<object>>" optional>
+          Array of normal vectors. Each normal should have `x`, `y`, and `z` properties.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="attributes" type="Array<AttributeProps>" optional default="[]">
+      Custom vertex attributes beyond position and normal.
+      
+      <Expandable title="AttributeProps">
+        <ParamField path="name" type="string" required>
+          Attribute name in the shader.
+        </ParamField>
+        
+        <ParamField path="size" type="number" required>
+          Number of components per vertex (e.g., 3 for vec3).
+        </ParamField>
+        
+        <ParamField path="data" type="function" optional>
+          Function that returns attribute data. Signature: `(index: number, total: number) => Array<number>`
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="mode" type="number" optional default="0">
+      WebGL drawing mode. Common values:
+      - `0` (POINTS)
+      - `1` (LINES)
+      - `3` (LINE_STRIP)
+      - `4` (TRIANGLES)
+      - `5` (TRIANGLE_STRIP)
+    </ParamField>
+    
+    <ParamField path="modifiers" type="object" optional default="{}">
+      Attribute modifier functions. Keys are attribute names, values are functions with signature:
+      `(data: any, vertexIndex: number, componentIndex: number, instance: Instance) => number`
+    </ParamField>
+    
+    <ParamField path="multiplier" type="number" optional default="1">
+      Number of times to repeat the geometry. Used for instanced rendering of particles.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example
+
+```javascript
+const instance = new Instance({
+  vertex: `
+    attribute vec3 aPosition;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision highp float;
+    
+    void main() {
+      gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+  `,
+  uniforms: {
+    uTime: { type: 'float', value: 0 }
+  },
+  geometry: {
+    vertices: [
+      { x: 0, y: 0, z: 0 },
+      { x: 1, y: 0, z: 0 },
+      { x: 0, y: 1, z: 0 }
+    ]
+  },
+  mode: 0, // POINTS
+  multiplier: 1000
+});
+```
+
+## Properties
+
+<ResponseField name="gl" type="WebGLRenderingContext">
+  The WebGL rendering context (assigned by Renderer).
+</ResponseField>
+
+<ResponseField name="vertex" type="string">
+  The vertex shader source code.
+</ResponseField>
+
+<ResponseField name="fragment" type="string">
+  The fragment shader source code.
+</ResponseField>
+
+<ResponseField name="program" type="WebGLProgram">
+  The compiled and linked shader program.
+</ResponseField>
+
+<ResponseField name="uniforms" type="{ [key: string]: UniformProps }">
+  Uniform variables with their types, values, and locations.
+</ResponseField>
+
+<ResponseField name="geometry" type="GeometryProps">
+  Geometry data including vertices and optional normals.
+</ResponseField>
+
+<ResponseField name="attributes" type="Array<AttributeProps>">
+  All vertex attributes including auto-generated `aPosition` and `aNormal`.
+</ResponseField>
+
+<ResponseField name="attributeKeys" type="Array<string>">
+  Array of attribute names for quick lookup.
+</ResponseField>
+
+<ResponseField name="multiplier" type="number" default="1">
+  Geometry repetition count for instanced rendering.
+</ResponseField>
+
+<ResponseField name="modifiers" type="Array<Function>">
+  Attribute modifier functions.
+</ResponseField>
+
+<ResponseField name="buffers" type="Array<BufferProps>">
+  WebGL buffers for all attributes.
+</ResponseField>
+
+<ResponseField name="uniformMap" type="object">
+  Mapping of uniform types to setter functions (inherited from Renderer).
+</ResponseField>
+
+<ResponseField name="mode" type="number" default="0">
+  WebGL drawing mode (POINTS, LINES, TRIANGLES, etc.).
+</ResponseField>
+
+<ResponseField name="onRender" type="Function" optional>
+  Callback executed after each render. Receives the instance as an argument.
+</ResponseField>
+
+## Methods
+
+### compileShader()
+
+Compiles a GLSL shader.
+
+```typescript
+compileShader(type: number, source: string): WebGLShader
+```
+
+<ParamField path="type" type="number" required>
+  Shader type constant:
+  - `35633` (VERTEX_SHADER)
+  - `35632` (FRAGMENT_SHADER)
+</ParamField>
+
+<ParamField path="source" type="string" required>
+  GLSL shader source code.
+</ParamField>
+
+**Returns:** `WebGLShader` - The compiled shader.
+
+**Behavior:**
+- Creates a shader of the specified type
+- Sets the shader source code
+- Compiles the shader
+- Returns the compiled shader (no error checking in this method)
+
+### prepareProgram()
+
+Creates and links the shader program.
+
+```typescript
+prepareProgram(): void
+```
+
+**Behavior:**
+- Creates a new WebGL program
+- Compiles and attaches vertex shader (type 35633)
+- Compiles and attaches fragment shader (type 35632)
+- Links the program
+- Activates the program with `gl.useProgram()`
+- Assigns the program to `this.program`
+- Automatically called in the constructor
+
+### prepareUniforms()
+
+Retrieves uniform locations from the shader program.
+
+```typescript
+prepareUniforms(): void
+```
+
+**Behavior:**
+- Iterates through all uniforms in `this.uniforms`
+- Gets the location of each uniform using `gl.getUniformLocation()`
+- Assigns the location to the uniform's `location` property
+- Automatically called in the constructor
+
+### prepareAttributes()
+
+Creates buffer attributes for geometry data.
+
+```typescript
+prepareAttributes(): void
+```
+
+**Behavior:**
+- Adds `aPosition` attribute (size 3) if `geometry.vertices` is defined
+- Adds `aNormal` attribute (size 3) if `geometry.normal` is defined
+- Builds `attributeKeys` array for quick lookup
+- Calls `prepareAttribute()` for each attribute
+- Automatically called in the constructor
+
+### prepareAttribute()
+
+Prepares a single attribute with data and modifiers.
+
+```typescript
+prepareAttribute(attribute: AttributeProps): void
+```
+
+<ParamField path="attribute" type="AttributeProps" required>
+  The attribute to prepare with name, size, and optional data function.
+</ParamField>
+
+**Behavior:**
+- Creates a `Float32Array` sized for `multiplier * vertices.length * attribute.size`
+- For each multiplier instance:
+  - Calls `attribute.data()` function if provided
+  - For each vertex and component:
+    - Applies attribute modifier if defined in `this.modifiers`
+    - For `aPosition`: uses vertex x/y/z values
+    - For `aNormal`: uses normal x/y/z values
+    - Otherwise: uses data from `attribute.data()` function
+- Stores the buffer data in `attribute.data`
+- Calls `prepareBuffer()` to create the WebGL buffer
+
+### prepareBuffer()
+
+Creates a WebGL buffer for an attribute.
+
+```typescript
+prepareBuffer(attribute: AttributeProps): void
+```
+
+<ParamField path="attribute" type="AttributeProps" required>
+  The attribute with prepared data.
+</ParamField>
+
+**Behavior:**
+- Creates a WebGL buffer with `gl.createBuffer()`
+- Binds to ARRAY_BUFFER (34962)
+- Uploads data with STATIC_DRAW usage (35044)
+- Gets the attribute location in the shader
+- Enables the vertex attribute array
+- Sets up the attribute pointer (FLOAT type 5126)
+- Stores buffer info in `this.buffers` array
+
+### render()
+
+Renders the instance for a single frame.
+
+```typescript
+render(renderUniforms: object): void
+```
+
+<ParamField path="renderUniforms" type="object" required>
+  Shared uniforms from the renderer (typically projection/view/model matrices).
+</ParamField>
+
+**Behavior:**
+- Activates the instance's shader program
+- Binds all vertex attribute buffers
+- Merges `renderUniforms` into `this.uniforms`
+- Updates all uniforms using the `uniformMap`
+- Draws arrays with `gl.drawArrays()` for `multiplier * vertices.length` vertices
+- Calls `onRender` callback if defined
+- Called automatically by the Renderer each frame
+
+### destroy()
+
+Cleans up WebGL resources.
+
+```typescript
+destroy(): void
+```
+
+**Behavior:**
+- Deletes all vertex attribute buffers
+- Deletes the shader program
+- Sets `gl` to null
+- Called when the instance is removed from the renderer
+
+```javascript
+instance.destroy();
+```
+
+## Type Definitions
+
+```typescript
+interface InstanceProps {
+  attributes?: Array<AttributeProps>;
+  vertex?: string;
+  fragment?: string;
+  geometry?: GeometryProps;
+  mode?: number;
+  modifiers?: object;
+  multiplier?: number;
+  uniforms: {
+    [key: string]: UniformProps;
+  };
+}
+
+interface AttributeProps {
+  name: string;
+  size: number;
+  data?: any;
+}
+
+interface UniformProps {
+  type: string;
+  value: Array<number>;
+  location?: WebGLUniformLocation;
+}
+
+interface GeometryProps {
+  vertices?: Array<Array<object>>;
+  normal?: Array<Array<object>>;
+}
+
+interface BufferProps {
+  location: number;
+  buffer: WebGLBuffer;
+  size: number;
+}
+```

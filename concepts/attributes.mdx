@@ -1,0 +1,334 @@
+---
+title: Attributes
+description: Custom vertex attributes for passing per-vertex data to shaders
+---
+
+## Overview
+
+Attributes are per-vertex data passed to vertex shaders. Phenomenon automatically creates `aPosition` and `aNormal` attributes from your geometry, but you can define custom attributes for additional vertex data like colors, sizes, velocities, or random offsets.
+
+## Attribute Configuration
+
+Attributes are defined in the instance configuration:
+
+```typescript
+interface AttributeProps {
+  name: string;
+  size: number;
+  data?: (index: number, total: number) => Array<number>;
+}
+```
+
+<ParamField path="name" type="string" required>
+  Attribute name used in your vertex shader (e.g., `'aColor'`, `'aOffset'`, `'aSize'`).
+</ParamField>
+
+<ParamField path="size" type="number" required>
+  Number of components per vertex:
+  - `1` - float (scalar)
+  - `2` - vec2
+  - `3` - vec3
+  - `4` - vec4
+</ParamField>
+
+<ParamField path="data" type="function">
+  Function that returns an array of values for this attribute. Called for each instance when using a `multiplier`.
+  
+  **Parameters:**
+  - `index` (number) - Current instance index (0 to multiplier-1)
+  - `total` (number) - Total number of instances (same as multiplier)
+  
+  **Returns:** Array of `size` numbers
+</ParamField>
+
+## Built-in Attributes
+
+These are automatically created based on your geometry:
+
+<ParamField path="aPosition" type="vec3">
+  Vertex position from `geometry.vertices`. Size is always 3 (x, y, z).
+</ParamField>
+
+<ParamField path="aNormal" type="vec3">
+  Vertex normal from `geometry.normal`. Size is always 3 (x, y, z).
+</ParamField>
+
+## Custom Attributes
+
+Define custom attributes in the `attributes` array:
+
+```javascript
+renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  multiplier: 1000,
+  attributes: [
+    {
+      name: 'aOffset',
+      size: 3,
+      data: (i, total) => [
+        Math.random() * 4 - 2,
+        Math.random() * 4 - 2,
+        Math.random() * 4 - 2
+      ]
+    },
+    {
+      name: 'aSize',
+      size: 1,
+      data: () => [Math.random() * 5 + 1]
+    }
+  ],
+  uniforms: {}
+});
+```
+
+In your vertex shader:
+
+```glsl
+attribute vec3 aPosition;
+attribute vec3 aOffset;
+attribute float aSize;
+
+void main() {
+  vec3 pos = aPosition + aOffset;
+  gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+  gl_PointSize = aSize;
+}
+```
+
+## Attribute Modifiers
+
+For advanced control, use the `modifiers` object to compute attribute values based on vertex data:
+
+```javascript
+renderer.add('mesh', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  geometry: {
+    vertices: /* ... */
+  },
+  attributes: [
+    {
+      name: 'aColor',
+      size: 3,
+      data: () => [1, 0, 0] // Default color
+    }
+  ],
+  modifiers: {
+    aColor: (data, vertexIndex, componentIndex, instance) => {
+      // data: result from the attribute's data() function
+      // vertexIndex: index of current vertex
+      // componentIndex: 0, 1, or 2 (for vec3)
+      // instance: the Instance object
+      
+      if (componentIndex === 1) {
+        // Green channel varies by vertex
+        return vertexIndex / instance.geometry.vertices.length;
+      }
+      return data[componentIndex];
+    }
+  },
+  uniforms: {}
+});
+```
+
+<Note>
+  Modifiers are called during buffer preparation (at instance creation), not during rendering. They're useful for computed per-vertex data that doesn't change.
+</Note>
+
+## How Attributes Work Internally
+
+When you create an instance with a multiplier, Phenomenon:
+
+1. Calls `prepareAttributes()` to process all attributes
+2. For each attribute, calls `prepareAttribute()` which:
+   - Creates a `Float32Array` of size: `multiplier × vertices.length × attribute.size`
+   - Loops through each instance (multiplier)
+   - For each vertex in geometry
+   - For each component in the attribute size
+   - Calls the modifier function (if provided) or uses the data function result
+3. Calls `prepareBuffer()` to create and bind the WebGL buffer
+4. Stores buffer info in the `buffers` array
+
+The buffer data is stored in the attribute's `data` property after preparation:
+
+```javascript
+instance.attributes[0].data // Float32Array of all vertex data
+```
+
+## Examples
+
+### Random Offsets
+
+```javascript
+attributes: [
+  {
+    name: 'aOffset',
+    size: 3,
+    data: () => [
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ]
+  }
+]
+```
+
+### Color Gradient
+
+```javascript
+attributes: [
+  {
+    name: 'aColor',
+    size: 3,
+    data: (i, total) => {
+      const hue = (i / total) * 360;
+      return hslToRgb(hue, 1, 0.5);
+    }
+  }
+]
+```
+
+### Velocity Vectors
+
+```javascript
+attributes: [
+  {
+    name: 'aVelocity',
+    size: 3,
+    data: () => {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+      return [
+        Math.sin(phi) * Math.cos(theta),
+        Math.cos(phi),
+        Math.sin(phi) * Math.sin(theta)
+      ];
+    }
+  }
+]
+```
+
+### Particle Life
+
+```javascript
+attributes: [
+  {
+    name: 'aLife',
+    size: 1,
+    data: (i, total) => [i / total]
+  }
+]
+```
+
+### Grid Position
+
+```javascript
+const gridSize = 10;
+
+attributes: [
+  {
+    name: 'aGridPos',
+    size: 2,
+    data: (i, total) => [
+      (i % gridSize) / gridSize,
+      Math.floor(i / gridSize) / gridSize
+    ]
+  }
+]
+```
+
+## Complete Particle Example
+
+```javascript
+const vertexShader = `
+  precision highp float;
+  
+  attribute vec3 aPosition;
+  attribute vec3 aOffset;
+  attribute vec3 aVelocity;
+  attribute float aSize;
+  attribute vec3 aColor;
+  
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uViewMatrix;
+  uniform mat4 uModelMatrix;
+  uniform float uTime;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    vec3 pos = aPosition + aOffset + aVelocity * uTime;
+    vColor = aColor;
+    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+    gl_PointSize = aSize;
+  }
+`;
+
+const fragmentShader = `
+  precision highp float;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    vec2 center = gl_PointCoord - 0.5;
+    if (length(center) > 0.5) discard;
+    gl_FragColor = vec4(vColor, 1.0);
+  }
+`;
+
+const particles = renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  mode: 0,
+  multiplier: 10000,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  },
+  attributes: [
+    {
+      name: 'aOffset',
+      size: 3,
+      data: () => [
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10
+      ]
+    },
+    {
+      name: 'aVelocity',
+      size: 3,
+      data: () => [
+        (Math.random() - 0.5) * 0.1,
+        (Math.random() - 0.5) * 0.1,
+        (Math.random() - 0.5) * 0.1
+      ]
+    },
+    {
+      name: 'aSize',
+      size: 1,
+      data: () => [Math.random() * 3 + 1]
+    },
+    {
+      name: 'aColor',
+      size: 3,
+      data: (i, total) => {
+        const t = i / total;
+        return [
+          0.5 + 0.5 * Math.sin(t * Math.PI * 2),
+          0.5 + 0.5 * Math.cos(t * Math.PI * 2),
+          0.8
+        ];
+      }
+    }
+  ]
+});
+
+particles.onRender = (instance) => {
+  instance.uniforms.uTime.value[0] = performance.now() * 0.001;
+};
+```
+
+<Warning>
+  Attribute data functions are called during instance creation, not every frame. For animated values, use uniforms instead.
+</Warning>

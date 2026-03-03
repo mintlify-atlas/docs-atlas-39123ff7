@@ -1,0 +1,457 @@
+---
+title: Shapes and Geometry
+description: Create complex 3D shapes using geometry and particle multipliers
+---
+
+This example demonstrates how to render custom 3D geometry using Phenomenon's geometry system and render mode options.
+
+## Complete Example
+
+<CodeGroup>
+```javascript index.js
+import Phenomenon from 'phenomenon';
+
+// Helper function to create rotation matrix
+function rotateY(matrix, angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const mv0 = matrix[0];
+  const mv4 = matrix[4];
+  const mv8 = matrix[8];
+  
+  matrix[0] = c * matrix[0] + s * matrix[2];
+  matrix[4] = c * matrix[4] + s * matrix[6];
+  matrix[8] = c * matrix[8] + s * matrix[10];
+  
+  matrix[2] = c * matrix[2] - s * mv0;
+  matrix[6] = c * matrix[6] - s * mv4;
+  matrix[10] = c * matrix[10] - s * mv8;
+}
+
+// Create the renderer
+const phenomenon = new Phenomenon({
+  settings: {
+    devicePixelRatio: 1,
+    position: { x: 0, y: 0, z: 3 },
+    onRender: (renderer) => {
+      // Rotate the entire scene
+      rotateY(renderer.uniforms.uModelMatrix.value, 0.01);
+    },
+  },
+});
+
+// Define a cube geometry
+const cubeGeometry = {
+  vertices: [
+    // Front face
+    { x: -0.5, y: -0.5, z: 0.5 },
+    { x: 0.5, y: -0.5, z: 0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: -0.5, z: 0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: 0.5, z: 0.5 },
+    
+    // Back face
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: -0.5, y: 0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: -0.5 },
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: -0.5 },
+    { x: 0.5, y: -0.5, z: -0.5 },
+    
+    // Top face
+    { x: -0.5, y: 0.5, z: -0.5 },
+    { x: -0.5, y: 0.5, z: 0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: 0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: 0.5, y: 0.5, z: -0.5 },
+    
+    // Bottom face
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: -0.5, z: 0.5 },
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: -0.5, z: 0.5 },
+    { x: -0.5, y: -0.5, z: 0.5 },
+    
+    // Right face
+    { x: 0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: 0.5, y: -0.5, z: -0.5 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: 0.5, y: -0.5, z: 0.5 },
+    
+    // Left face
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: -0.5, y: -0.5, z: 0.5 },
+    { x: -0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: -0.5, z: -0.5 },
+    { x: -0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: 0.5, z: -0.5 },
+  ],
+};
+
+// Attributes for per-instance variation
+const attributes = [
+  {
+    name: 'aColor',
+    data: (i) => [
+      0.2 + Math.random() * 0.3,
+      0.4 + Math.random() * 0.3,
+      0.8 + Math.random() * 0.2,
+    ],
+    size: 3,
+  },
+];
+
+// Vertex shader for geometry
+const vertex = `
+  attribute vec3 aPosition;
+  attribute vec3 aColor;
+  
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uModelMatrix;
+  uniform mat4 uViewMatrix;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    vColor = aColor;
+  }
+`;
+
+// Fragment shader
+const fragment = `
+  precision mediump float;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    gl_FragColor = vec4(vColor, 1.0);
+  }
+`;
+
+// Add cube instance
+phenomenon.add('cube', {
+  geometry: cubeGeometry,
+  attributes,
+  vertex,
+  fragment,
+  mode: 4,        // TRIANGLES mode
+  multiplier: 1,
+});
+```
+
+```html index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shapes and Geometry</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
+```
+</CodeGroup>
+
+## Understanding Geometry
+
+### Vertices
+
+Geometry is defined by an array of vertex positions:
+
+```javascript
+const geometry = {
+  vertices: [
+    { x: -1, y: -1, z: 0 },  // Bottom-left
+    { x: 1, y: -1, z: 0 },   // Bottom-right
+    { x: 0, y: 1, z: 0 },    // Top
+  ],
+};
+```
+
+<Note>
+  For triangles (mode: 4), vertices should be defined in groups of 3. Each group forms one triangle.
+</Note>
+
+### Render Modes
+
+Phenomenon supports different WebGL drawing modes:
+
+<Tabs>
+  <Tab title="Particles">
+    ```javascript
+    mode: 0  // GL_POINTS
+    ```
+    
+    Renders each vertex as a particle. Best for particle systems.
+    
+    - Each vertex is independent
+    - Size controlled by `gl_PointSize`
+    - Default mode if not specified
+  </Tab>
+  
+  <Tab title="Triangles">
+    ```javascript
+    mode: 4  // GL_TRIANGLES
+    ```
+    
+    Renders vertices in groups of 3 as triangles. Best for solid shapes.
+    
+    - Every 3 vertices form a triangle
+    - Can create solid 3D shapes
+    - Requires proper vertex ordering
+  </Tab>
+  
+  <Tab title="Other Modes">
+    ```javascript
+    mode: 1  // GL_LINES
+    mode: 2  // GL_LINE_LOOP
+    mode: 3  // GL_LINE_STRIP
+    mode: 5  // GL_TRIANGLE_STRIP
+    mode: 6  // GL_TRIANGLE_FAN
+    ```
+    
+    See [WebGL documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Constants#rendering_primitives) for details.
+  </Tab>
+</Tabs>
+
+### Position Attribute
+
+When using geometry, Phenomenon automatically creates an `aPosition` attribute:
+
+```glsl
+attribute vec3 aPosition;  // Automatically provided from geometry.vertices
+```
+
+You can add offset or modify position in the shader:
+
+```glsl
+vec4(aPosition + customOffset, 1.0)
+```
+
+## Multiple Instances
+
+The `multiplier` creates multiple copies of the geometry with different attribute values:
+
+```javascript
+phenomenon.add('cubes', {
+  geometry: cubeGeometry,
+  attributes: [
+    {
+      name: 'aOffset',
+      data: (i) => [
+        (i % 10) * 2 - 10,  // x offset
+        0,                   // y offset
+        Math.floor(i / 10) * 2 - 10,  // z offset
+      ],
+      size: 3,
+    },
+  ],
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aOffset;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      // Add offset to base geometry
+      vec3 pos = aPosition + aOffset;
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragment,
+  mode: 4,
+  multiplier: 100,  // Creates 100 cubes in a 10x10 grid
+});
+```
+
+## Particle Shapes
+
+Combine particles with geometry to create particle-based shapes:
+
+```javascript
+// Sphere geometry
+const createSphere = (radius, segments) => {
+  const vertices = [];
+  
+  for (let lat = 0; lat <= segments; lat++) {
+    const theta = lat * Math.PI / segments;
+    const sinTheta = Math.sin(theta);
+    const cosTheta = Math.cos(theta);
+    
+    for (let lon = 0; lon <= segments; lon++) {
+      const phi = lon * 2 * Math.PI / segments;
+      const sinPhi = Math.sin(phi);
+      const cosPhi = Math.cos(phi);
+      
+      vertices.push({
+        x: radius * cosPhi * sinTheta,
+        y: radius * cosTheta,
+        z: radius * sinPhi * sinTheta,
+      });
+    }
+  }
+  
+  return { vertices };
+};
+
+phenomenon.add('sphere', {
+  geometry: createSphere(1, 30),
+  attributes: [
+    {
+      name: 'aColor',
+      data: () => [1.0, 0.5, 0.2],
+      size: 3,
+    },
+  ],
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aColor;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    varying vec3 vColor;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = 3.0;
+      vColor = aColor;
+    }
+  `,
+  fragment,
+  mode: 0,  // Render as particles
+  multiplier: 1,
+});
+```
+
+## Advanced: Modifiers
+
+Modifiers transform attribute data during initialization:
+
+```javascript
+const modifiers = {
+  aPosition: (data, vertexIndex, componentIndex, instance) => {
+    // data: value from attribute data function
+    // vertexIndex: which vertex (0 to vertices.length)
+    // componentIndex: which component (0=x, 1=y, 2=z)
+    // instance: the instance object
+    
+    const position = instance.geometry.vertices[vertexIndex];
+    const offset = data ? data[componentIndex] : 0;
+    
+    // Scale and offset the geometry
+    return position[['x', 'y', 'z'][componentIndex]] * 0.5 + offset;
+  },
+};
+
+phenomenon.add('modified', {
+  geometry: cubeGeometry,
+  attributes: [
+    {
+      name: 'aOffset',
+      data: (i) => [i * 2, 0, 0],
+      size: 3,
+    },
+  ],
+  modifiers,
+  vertex,
+  fragment,
+  mode: 4,
+  multiplier: 5,
+});
+```
+
+<Tip>
+  Modifiers are called during initialization for every vertex component. Use them to procedurally generate complex attribute data based on geometry.
+</Tip>
+
+## Normals for Lighting
+
+Add normals to your geometry for lighting calculations:
+
+```javascript
+const geometry = {
+  vertices: [
+    { x: -1, y: 0, z: -1 },
+    { x: 1, y: 0, z: -1 },
+    { x: 0, y: 1, z: 0 },
+  ],
+  normal: [
+    { x: 0, y: 0.7, z: -0.7 },
+    { x: 0, y: 0.7, z: -0.7 },
+    { x: 0, y: 0.7, z: -0.7 },
+  ],
+};
+
+const vertex = `
+  attribute vec3 aPosition;
+  attribute vec3 aNormal;  // Automatically provided from geometry.normal
+  
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uModelMatrix;
+  uniform mat4 uViewMatrix;
+  
+  varying vec3 vNormal;
+  
+  void main() {
+    gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    vNormal = aNormal;
+  }
+`;
+
+const fragment = `
+  precision mediump float;
+  
+  varying vec3 vNormal;
+  
+  void main() {
+    // Simple directional lighting
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+    float light = max(dot(vNormal, lightDir), 0.2);
+    
+    vec3 color = vec3(0.3, 0.6, 1.0);
+    gl_FragColor = vec4(color * light, 1.0);
+  }
+`;
+```
+
+## Performance Considerations
+
+- **Multiplier vs Instances**: One instance with `multiplier: 1000` is faster than 1000 instances with `multiplier: 1`
+- **Vertex Count**: More vertices per geometry = more GPU processing
+- **Mode**: Triangles (mode: 4) require 3x the vertices as particles (mode: 0)
+- **Attributes**: More attributes = more memory on GPU
+
+<Note>
+  For best performance, use the lowest multiplier and vertex count that achieves your visual goal.
+</Note>
+
+## Next Steps
+
+- Return to [examples overview](/examples/overview)
+- Learn about [basic particles](/examples/basic-particles)
+- Explore [transitions and animations](/examples/transitions)

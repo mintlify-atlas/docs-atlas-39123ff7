@@ -1,0 +1,431 @@
+---
+title: Performance Optimization
+description: Maximize rendering performance and achieve 60 FPS with millions of particles
+---
+
+Phenomenon is built for performance, but getting the most out of it requires understanding GPU optimization and WebGL best practices.
+
+## Key Performance Principles
+
+<Steps>
+  <Step title="Minimize draw calls">
+    Each instance requires a separate draw call. Fewer instances with higher multipliers perform better than many instances with low multipliers.
+
+    ```javascript
+    // Good: One instance with high multiplier
+    renderer.add('particles', {
+      multiplier: 100000,
+      geometry: { vertices: [{ x: 0, y: 0, z: 0 }] }
+    });
+
+    // Bad: Many instances with low multipliers
+    for (let i = 0; i < 100; i++) {
+      renderer.add(`particles-${i}`, {
+        multiplier: 1000,
+        geometry: { vertices: [{ x: 0, y: 0, z: 0 }] }
+      });
+    }
+    ```
+  </Step>
+
+  <Step title="Optimize attribute data">
+    Generate attribute data efficiently and avoid unnecessary calculations:
+
+    ```javascript
+    // Good: Pre-calculate once
+    const positions = new Float32Array(300000);
+    for (let i = 0; i < 100000; i++) {
+      const angle = (i / 100000) * Math.PI * 2;
+      positions[i * 3] = Math.cos(angle);
+      positions[i * 3 + 1] = Math.sin(angle);
+      positions[i * 3 + 2] = 0;
+    }
+
+    // Bad: Recalculate in data function
+    {
+      name: 'aPosition',
+      size: 3,
+      data: (i, total) => {
+        const angle = (i / total) * Math.PI * 2;
+        return [Math.cos(angle), Math.sin(angle), 0];
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Simplify shaders">
+    Keep vertex and fragment shaders as simple as possible. Move calculations to attributes when possible:
+
+    ```javascript
+    // Good: Pre-calculated attribute
+    attribute float aRotation;
+    void main() {
+      vec2 pos = vec2(
+        cos(aRotation) * aPosition.x - sin(aRotation) * aPosition.y,
+        sin(aRotation) * aPosition.x + cos(aRotation) * aPosition.y
+      );
+    }
+
+    // Bad: Calculate per-frame
+    uniform float uTime;
+    void main() {
+      float rotation = uTime + aInstanceId * 0.1;
+      // Complex calculation every frame
+    }
+    ```
+  </Step>
+
+  <Step title="Use appropriate precision">
+    Use `mediump` or `lowp` precision in fragment shaders when high precision isn't needed:
+
+    ```glsl
+    precision mediump float; // Good for most cases
+    // precision highp float; // Only when necessary
+    ```
+  </Step>
+</Steps>
+
+## Device Pixel Ratio
+
+The `devicePixelRatio` setting significantly impacts performance.
+
+```javascript
+const renderer = new Phenomenon({
+  settings: {
+    // Best quality, but slower on high-DPI screens
+    devicePixelRatio: window.devicePixelRatio,
+    
+    // Best performance
+    devicePixelRatio: 1,
+    
+    // Balanced approach
+    devicePixelRatio: Math.min(window.devicePixelRatio, 2)
+  }
+});
+```
+
+<Tip>
+  For particle effects, `devicePixelRatio: 1` often provides the best balance of performance and visual quality, since particles are small and don't benefit as much from high resolution.
+</Tip>
+
+## Context Settings
+
+Optimize WebGL context creation for your use case.
+
+```javascript
+const renderer = new Phenomenon({
+  context: {
+    alpha: false,           // Disable transparency for better performance
+    antialias: false,       // Disable antialiasing (usually not needed for particles)
+    depth: true,            // Enable if you need depth testing
+    stencil: false,         // Disable if not using stencil buffer
+    powerPreference: 'high-performance'  // Request high-performance GPU
+  },
+  settings: {
+    clearColor: [0, 0, 0, 1]  // Use clearColor instead of alpha
+  }
+});
+```
+
+<Warning>
+  Enabling `antialias: true` can significantly impact performance, especially with high particle counts. Test thoroughly before enabling.
+</Warning>
+
+## Attribute Optimization
+
+### Reduce Attribute Size
+
+Use the smallest attribute size that meets your needs.
+
+```javascript
+// Good: Only 2 components for 2D offset
+{
+  name: 'aOffset',
+  size: 2,  // vec2 instead of vec3
+  data: (i, total) => [Math.random(), Math.random()]
+}
+
+// Good: Single float for simple values
+{
+  name: 'aSpeed',
+  size: 1,
+  data: (i) => [0.5 + Math.random() * 0.5]
+}
+```
+
+### Reuse Calculations
+
+```javascript
+// Good: Calculate once, reuse
+const randomValues = new Float32Array(100000);
+for (let i = 0; i < 100000; i++) {
+  randomValues[i] = Math.random();
+}
+
+renderer.add('optimized', {
+  attributes: [
+    {
+      name: 'aRandom1',
+      size: 1,
+      data: (i) => [randomValues[i]]
+    },
+    {
+      name: 'aRandom2',
+      size: 1,
+      data: (i) => [randomValues[i] * 0.5]
+    }
+  ],
+  multiplier: 100000
+});
+```
+
+## Shader Optimization
+
+### Avoid Expensive Operations
+
+```glsl
+// Bad: Multiple expensive operations
+void main() {
+  float noise = sin(aPosition.x * 100.0) * 
+                cos(aPosition.y * 100.0) * 
+                tan(uTime * 10.0);
+  vec3 pos = aPosition * pow(noise, 2.0);
+}
+
+// Good: Simplified calculation
+void main() {
+  float offset = sin(uTime + aInstanceId);
+  vec3 pos = aPosition + vec3(0.0, offset * 0.1, 0.0);
+}
+```
+
+### Use Built-in Functions
+
+```glsl
+// Good: Use mix() instead of manual interpolation
+vec3 pos = mix(aPositionStart, aPositionEnd, uProgress);
+
+// Bad: Manual calculation
+vec3 pos = aPositionStart + (aPositionEnd - aPositionStart) * uProgress;
+
+// Good: Use smoothstep for easing
+float t = smoothstep(0.0, 1.0, uProgress);
+
+// Bad: Complex easing calculation
+float t = uProgress * uProgress * (3.0 - 2.0 * uProgress);
+```
+
+### Minimize Varying Variables
+
+```glsl
+// Good: Only pass what's needed
+varying vec3 vColor;
+
+// Bad: Passing unnecessary data
+varying vec3 vColor;
+varying vec3 vPosition;
+varying vec3 vNormal;
+varying vec2 vUv;
+// ... when only vColor is used
+```
+
+## Uniform Updates
+
+Update uniforms efficiently to avoid unnecessary work.
+
+```javascript
+// Good: Only update changed uniforms
+const instance = renderer.add('particles', {
+  uniforms: {
+    uTime: { type: 'float', value: 0 },
+    uStaticValue: { type: 'float', value: 1.0 }  // Never changes
+  },
+  onRender: (instance) => {
+    instance.uniforms.uTime.value += 0.016;
+    // Don't update uStaticValue
+  }
+});
+
+// Bad: Updating everything every frame
+onRender: (instance) => {
+  instance.uniforms.uTime.value += 0.016;
+  instance.uniforms.uStaticValue.value = 1.0;  // Unnecessary
+}
+```
+
+## Conditional Rendering
+
+Pause rendering when not needed to save resources.
+
+```javascript
+const renderer = new Phenomenon({
+  settings: {
+    shouldRender: true
+  }
+});
+
+// Pause when tab is not visible
+document.addEventListener('visibilitychange', () => {
+  renderer.toggle(!document.hidden);
+});
+
+// Pause when element is not in viewport
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    renderer.toggle(entry.isIntersecting);
+  });
+});
+
+observer.observe(renderer.canvas);
+```
+
+<Note>
+  The `toggle()` method stops `requestAnimationFrame` when rendering is paused, completely freeing up resources.
+</Note>
+
+## Memory Management
+
+### Proper Cleanup
+
+```javascript
+// Remove individual instances
+renderer.remove('particles');
+
+// Destroy entire renderer
+renderer.destroy();
+
+// When creating temporary instances
+function createExplosion() {
+  const instance = renderer.add('explosion', {
+    // ... configuration
+    onRender: (inst) => {
+      inst.uniforms.uTime.value += 0.016;
+      
+      // Auto-cleanup after animation
+      if (inst.uniforms.uTime.value > 2.0) {
+        renderer.remove('explosion');
+      }
+    }
+  });
+}
+```
+
+### Reuse Instances
+
+```javascript
+// Good: Reuse single instance with dynamic attributes
+let currentState = 'start';
+
+const instance = renderer.add('particles', {
+  // ... configuration
+});
+
+function updateState(newState) {
+  if (newState === 'start') {
+    instance.prepareAttribute({
+      name: 'aPosition',
+      size: 3,
+      data: (i) => [Math.random(), Math.random(), Math.random()]
+    });
+  }
+  currentState = newState;
+}
+
+// Bad: Create new instance for each state
+function updateState(newState) {
+  renderer.remove('particles');
+  renderer.add('particles', {
+    // ... new configuration
+  });
+}
+```
+
+## Performance Monitoring
+
+Track performance to identify bottlenecks.
+
+```javascript
+let frameCount = 0;
+let lastTime = performance.now();
+
+const renderer = new Phenomenon({
+  settings: {
+    onRender: (renderer) => {
+      frameCount++;
+      
+      const currentTime = performance.now();
+      if (currentTime - lastTime >= 1000) {
+        const fps = (frameCount * 1000) / (currentTime - lastTime);
+        console.log(`FPS: ${fps.toFixed(2)}`);
+        
+        frameCount = 0;
+        lastTime = currentTime;
+      }
+    }
+  }
+});
+```
+
+## Scaling Strategies
+
+Adapt particle count based on device capabilities.
+
+```javascript
+function getOptimalParticleCount() {
+  const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+  const hasGoodGPU = navigator.hardwareConcurrency > 4;
+  
+  if (isMobile) {
+    return 10000;
+  } else if (hasGoodGPU) {
+    return 100000;
+  } else {
+    return 50000;
+  }
+}
+
+renderer.add('particles', {
+  multiplier: getOptimalParticleCount(),
+  // ... rest of configuration
+});
+```
+
+## Performance Checklist
+
+<Steps>
+  <Step title="Minimize instances">
+    Use high multiplier values instead of multiple instances.
+  </Step>
+  
+  <Step title="Optimize attributes">
+    Use smallest attribute sizes and pre-calculate data when possible.
+  </Step>
+  
+  <Step title="Simplify shaders">
+    Avoid expensive operations and unnecessary calculations.
+  </Step>
+  
+  <Step title="Set devicePixelRatio">
+    Use 1 or cap at 2 for best performance.
+  </Step>
+  
+  <Step title="Disable unnecessary features">
+    Turn off alpha, antialias, and stencil if not needed.
+  </Step>
+  
+  <Step title="Pause when hidden">
+    Use `toggle()` to stop rendering when not visible.
+  </Step>
+  
+  <Step title="Clean up instances">
+    Remove instances with `remove()` when no longer needed.
+  </Step>
+  
+  <Step title="Monitor FPS">
+    Track performance and adjust particle counts accordingly.
+  </Step>
+</Steps>
+
+<Warning>
+  Always test on lower-end devices. What runs at 60 FPS on a gaming PC might struggle on a mobile device.
+</Warning>

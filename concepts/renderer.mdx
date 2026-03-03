@@ -1,0 +1,237 @@
+---
+title: Renderer
+description: The main Renderer class that manages WebGL context, instances, and the render loop
+---
+
+## Overview
+
+The `Renderer` class is the core of Phenomenon. It creates and manages a WebGL rendering context, handles canvas sizing, manages instances, and runs the render loop.
+
+## Constructor
+
+```typescript
+new Renderer(props?: RendererProps)
+```
+
+<ParamField path="canvas" type="HTMLCanvasElement" default="document.querySelector('canvas')">
+  The canvas element to render to. Defaults to the first canvas element in the document.
+</ParamField>
+
+<ParamField path="context" type="object" default="{}">
+  WebGL context attributes passed to `getContext()`. Merged with default settings:
+  ```javascript
+  {
+    alpha: false,
+    antialias: false
+  }
+  ```
+</ParamField>
+
+<ParamField path="contextType" type="string" default="'experimental-webgl'">
+  The context type string passed to `canvas.getContext()`.
+</ParamField>
+
+<ParamField path="settings" type="object" default="{}">
+  Additional renderer settings. Can include:
+  - `devicePixelRatio` (number): Defaults to 1
+  - `clearColor` (Array\<number\>): RGBA values, defaults to `[1, 1, 1, 1]`
+  - `position` (object): Camera position `{x, y, z}`, defaults to `{x: 0, y: 0, z: 2}`
+  - `clip` (Array\<number\>): Near and far clipping planes, defaults to `[0.001, 100]`
+  - `onSetup` (Function): Hook called before first render with `gl` context
+  - `onRender` (Function): Hook called on every render frame with renderer instance
+</ParamField>
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug mode to log shader compilation errors to console.
+</ParamField>
+
+## Properties
+
+<ParamField path="gl" type="WebGLRenderingContext">
+  The WebGL rendering context.
+</ParamField>
+
+<ParamField path="canvas" type="HTMLCanvasElement">
+  The canvas element being rendered to.
+</ParamField>
+
+<ParamField path="instances" type="Map<string, Instance>">
+  Map of all instances managed by this renderer, keyed by their string identifiers.
+</ParamField>
+
+<ParamField path="uniforms" type="object">
+  Shared uniforms passed to all instances. Automatically includes `uProjectionMatrix`, `uViewMatrix`, and `uModelMatrix`.
+</ParamField>
+
+<ParamField path="shouldRender" type="boolean">
+  Whether the render loop is active. Use `toggle()` to change this.
+</ParamField>
+
+## Methods
+
+### add()
+
+Add a new instance to the renderer.
+
+```typescript
+add(key: string, settings: InstanceProps): Instance
+```
+
+<ParamField path="key" type="string" required>
+  Unique identifier for this instance.
+</ParamField>
+
+<ParamField path="settings" type="InstanceProps" required>
+  Instance configuration. See [Instances](/concepts/instances) for details.
+</ParamField>
+
+**Returns:** The created `Instance` object.
+
+```javascript
+const renderer = new Renderer();
+
+const particles = renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  },
+  multiplier: 10000
+});
+```
+
+<Note>
+  The renderer automatically injects its shared uniforms (projection, view, and model matrices) into each instance.
+</Note>
+
+### remove()
+
+Remove and destroy an instance.
+
+```typescript
+remove(key: string): void
+```
+
+<ParamField path="key" type="string" required>
+  The identifier of the instance to remove.
+</ParamField>
+
+```javascript
+renderer.remove('particles');
+```
+
+### toggle()
+
+Toggle or set the render loop state.
+
+```typescript
+toggle(shouldRender?: boolean): void
+```
+
+<ParamField path="shouldRender" type="boolean">
+  If provided, sets the render state. If omitted, toggles the current state.
+</ParamField>
+
+```javascript
+// Pause rendering
+renderer.toggle(false);
+
+// Resume rendering
+renderer.toggle(true);
+
+// Toggle current state
+renderer.toggle();
+```
+
+### resize()
+
+Handle canvas resize and update projection matrices. Automatically called on window resize events.
+
+```typescript
+resize(): void
+```
+
+<Note>
+  The renderer automatically sets up a window resize listener, so you typically don't need to call this manually.
+</Note>
+
+### render()
+
+Render all instances. This is called automatically in the render loop.
+
+```typescript
+render(): void
+```
+
+<Warning>
+  Don't call this manually unless you've disabled the render loop. The renderer uses `requestAnimationFrame` internally.
+</Warning>
+
+### destroy()
+
+Destroy the renderer and all its instances, stopping the render loop.
+
+```typescript
+destroy(): void
+```
+
+```javascript
+renderer.destroy();
+```
+
+## Lifecycle Hooks
+
+### onSetup
+
+Called once before the first render. Use this to configure the WebGL context.
+
+```javascript
+const renderer = new Renderer({
+  settings: {
+    onSetup: (gl) => {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    }
+  }
+});
+```
+
+### onRender
+
+Called on every frame after all instances have rendered.
+
+```javascript
+const renderer = new Renderer({
+  settings: {
+    onRender: (renderer) => {
+      // Update time uniform
+      const time = performance.now() * 0.001;
+      renderer.instances.forEach(instance => {
+        instance.uniforms.uTime.value[0] = time;
+      });
+    }
+  }
+});
+```
+
+## Example
+
+```javascript
+import Renderer from 'phenomenon';
+
+const renderer = new Renderer({
+  canvas: document.getElementById('canvas'),
+  settings: {
+    devicePixelRatio: window.devicePixelRatio,
+    clearColor: [0, 0, 0, 1],
+    position: { x: 0, y: 0, z: 3 }
+  },
+  debug: true
+});
+
+renderer.add('particles', {
+  vertex: `/* GLSL */`,
+  fragment: `/* GLSL */`,
+  multiplier: 5000
+});
+```

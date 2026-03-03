@@ -1,0 +1,397 @@
+---
+title: Particle Systems
+description: Learn how to create high-performance particle effects using Phenomenon's GPU-accelerated rendering
+---
+
+Phenomenon excels at rendering millions of particles using GPU acceleration. This guide covers creating particle systems from basic to advanced implementations.
+
+## Basic Particle System
+
+The simplest particle system uses the default mode (points) and a minimal vertex/fragment shader setup.
+
+```javascript
+import Phenomenon from 'phenomenon';
+
+// Create renderer
+const renderer = new Phenomenon({
+  settings: {
+    clearColor: [0, 0, 0, 1],
+    devicePixelRatio: window.devicePixelRatio,
+  }
+});
+
+// Add particle instance
+renderer.add('particles', {
+  vertex: `
+    attribute vec3 aPosition;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    
+    void main() {
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    }
+  `,
+  mode: 0, // Points mode
+  multiplier: 10000,
+  geometry: {
+    vertices: [{ x: 0, y: 0, z: 0 }]
+  }
+});
+```
+
+<Note>
+  The `multiplier` parameter duplicates the base geometry, making it easy to render thousands of particles from a single vertex definition.
+</Note>
+
+## Custom Particle Positions
+
+Use custom attributes to control individual particle positions and properties.
+
+<Steps>
+  <Step title="Define custom attributes">
+    Add attributes with size and data generator functions:
+
+    ```javascript
+    renderer.add('particles', {
+      attributes: [
+        {
+          name: 'aPositionStart',
+          size: 3,
+          data: (i, total) => {
+            return [
+              (Math.random() - 0.5) * 2,
+              (Math.random() - 0.5) * 2,
+              (Math.random() - 0.5) * 2
+            ];
+          }
+        },
+        {
+          name: 'aPositionEnd',
+          size: 3,
+          data: (i, total) => {
+            const angle = (i / total) * Math.PI * 2;
+            const radius = 0.5;
+            return [
+              Math.cos(angle) * radius,
+              Math.sin(angle) * radius,
+              0
+            ];
+          }
+        }
+      ],
+      // ... vertex and fragment shaders
+    });
+    ```
+  </Step>
+
+  <Step title="Use attributes in shaders">
+    Access custom attributes in your vertex shader:
+
+    ```glsl
+    attribute vec3 aPosition;
+    attribute vec3 aPositionStart;
+    attribute vec3 aPositionEnd;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    uniform float uProgress;
+    
+    void main() {
+      vec3 pos = mix(aPositionStart, aPositionEnd, uProgress);
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 3.0;
+    }
+    ```
+  </Step>
+
+  <Step title="Update uniforms for animation">
+    Use the `onRender` hook to animate particles:
+
+    ```javascript
+    const instance = renderer.add('particles', {
+      // ... configuration
+      uniforms: {
+        uProgress: {
+          type: 'float',
+          value: 0
+        }
+      },
+      onRender: (instance) => {
+        instance.uniforms.uProgress.value += 0.01;
+        if (instance.uniforms.uProgress.value > 1) {
+          instance.uniforms.uProgress.value = 0;
+        }
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Colored Particles
+
+Add color attributes to create vibrant particle effects.
+
+```javascript
+renderer.add('colorful-particles', {
+  attributes: [
+    {
+      name: 'aPosition',
+      size: 3,
+      data: (i, total) => [
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      ]
+    },
+    {
+      name: 'aColor',
+      size: 3,
+      data: (i, total) => [
+        Math.random(),
+        Math.random(),
+        Math.random()
+      ]
+    }
+  ],
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aColor;
+    
+    varying vec3 vColor;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vColor = aColor;
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = 4.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    varying vec3 vColor;
+    
+    void main() {
+      gl_FragColor = vec4(vColor, 1.0);
+    }
+  `,
+  mode: 0,
+  multiplier: 5000
+});
+```
+
+## Particle Size Variation
+
+Create depth and visual interest by varying particle sizes.
+
+```javascript
+renderer.add('varied-particles', {
+  attributes: [
+    {
+      name: 'aSize',
+      size: 1,
+      data: (i, total) => [1.0 + Math.random() * 5.0]
+    }
+  ],
+  vertex: `
+    attribute vec3 aPosition;
+    attribute float aSize;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = aSize;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    
+    void main() {
+      // Circular particles
+      vec2 center = gl_PointCoord - vec2(0.5);
+      float dist = length(center);
+      if (dist > 0.5) discard;
+      
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0 - dist * 2.0);
+    }
+  `,
+  mode: 0,
+  multiplier: 3000
+});
+```
+
+<Tip>
+  Use `gl_PointCoord` in the fragment shader to create circular or textured particles instead of squares.
+</Tip>
+
+## Performance Best Practices
+
+<Warning>
+  The `multiplier` parameter is crucial for performance. Using one instance with `multiplier: 10000` is significantly faster than 10 instances with `multiplier: 1000` each.
+</Warning>
+
+### Optimize Attribute Data
+
+```javascript
+// Good: Generate data once
+const positions = new Float32Array(30000);
+for (let i = 0; i < 10000; i++) {
+  positions[i * 3] = Math.random();
+  positions[i * 3 + 1] = Math.random();
+  positions[i * 3 + 2] = Math.random();
+}
+
+renderer.add('optimized', {
+  attributes: [
+    {
+      name: 'aCustomPosition',
+      size: 3,
+      data: (i) => [
+        positions[i * 3],
+        positions[i * 3 + 1],
+        positions[i * 3 + 2]
+      ]
+    }
+  ],
+  // ... rest of config
+});
+```
+
+### Reduce Shader Complexity
+
+```javascript
+// Avoid expensive operations in shaders
+// Bad: Complex calculations per particle
+void main() {
+  float noise = sin(aPosition.x * 100.0) * cos(aPosition.y * 100.0);
+  // ...
+}
+
+// Good: Pre-calculate and pass as attribute
+attribute float aNoise;
+void main() {
+  // Use pre-calculated value
+}
+```
+
+## Common Patterns
+
+### Particle Trails
+
+```javascript
+renderer.add('trails', {
+  attributes: [
+    {
+      name: 'aOffset',
+      size: 1,
+      data: (i, total) => [i / total]
+    }
+  ],
+  uniforms: {
+    uTime: { type: 'float', value: 0 }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute float aOffset;
+    
+    uniform float uTime;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      float t = uTime - aOffset * 2.0;
+      vec3 pos = aPosition;
+      pos.y += sin(t) * 0.5;
+      pos.x += cos(t) * 0.5;
+      
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 0.8);
+    }
+  `,
+  mode: 0,
+  multiplier: 1000,
+  onRender: (instance) => {
+    instance.uniforms.uTime.value += 0.016;
+  }
+});
+```
+
+### Particle Explosions
+
+```javascript
+renderer.add('explosion', {
+  attributes: [
+    {
+      name: 'aVelocity',
+      size: 3,
+      data: (i, total) => {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const speed = 0.5 + Math.random() * 0.5;
+        
+        return [
+          Math.sin(phi) * Math.cos(theta) * speed,
+          Math.sin(phi) * Math.sin(theta) * speed,
+          Math.cos(phi) * speed
+        ];
+      }
+    }
+  ],
+  uniforms: {
+    uTime: { type: 'float', value: 0 }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aVelocity;
+    
+    uniform float uTime;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vec3 pos = aPosition + aVelocity * uTime;
+      pos.y -= uTime * uTime * 0.5; // Gravity
+      
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 3.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    uniform float uTime;
+    
+    void main() {
+      float alpha = 1.0 - uTime * 0.5;
+      gl_FragColor = vec4(1.0, 0.5, 0.0, alpha);
+    }
+  `,
+  mode: 0,
+  multiplier: 2000,
+  onRender: (instance) => {
+    instance.uniforms.uTime.value += 0.016;
+  }
+});
+```

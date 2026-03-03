@@ -1,0 +1,288 @@
+---
+title: Renderer
+description: The main Renderer class for managing WebGL context and rendering instances
+---
+
+## Constructor
+
+Creates a new Renderer instance with WebGL context and default settings.
+
+```typescript
+new Renderer(props?: RendererProps)
+```
+
+### Parameters
+
+<ParamField path="props" type="RendererProps" optional>
+  Configuration object for the renderer
+  
+  <Expandable title="properties">
+    <ParamField path="canvas" type="HTMLCanvasElement" optional default="document.querySelector('canvas')">
+      The canvas element to render to. If not provided, selects the first canvas element in the document.
+    </ParamField>
+    
+    <ParamField path="context" type="object" optional default="{}">
+      WebGL context attributes to pass to `getContext()`. Merged with default attributes:
+      - `alpha: false`
+      - `antialias: false`
+    </ParamField>
+    
+    <ParamField path="contextType" type="string" optional default="'experimental-webgl'">
+      The WebGL context type to request from the canvas.
+    </ParamField>
+    
+    <ParamField path="settings" type="object" optional default="{}">
+      Additional settings to override renderer defaults.
+      
+      <Expandable title="default settings">
+        - `devicePixelRatio: 1`
+        - `clearColor: [1, 1, 1, 1]`
+        - `position: { x: 0, y: 0, z: 2 }`
+        - `clip: [0.001, 100]`
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="debug" type="boolean" optional default="false">
+      Enables debug mode for shader compilation errors.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example
+
+```javascript
+const renderer = new Renderer({
+  canvas: document.getElementById('canvas'),
+  contextType: 'webgl2',
+  settings: {
+    devicePixelRatio: window.devicePixelRatio,
+    clearColor: [0, 0, 0, 1]
+  },
+  debug: true
+});
+```
+
+## Properties
+
+<ResponseField name="gl" type="WebGLRenderingContext">
+  The WebGL rendering context.
+</ResponseField>
+
+<ResponseField name="canvas" type="HTMLCanvasElement">
+  The canvas element being rendered to.
+</ResponseField>
+
+<ResponseField name="uniforms" type="{ [key: string]: UniformProps }">
+  Shared uniforms passed to all instances. Automatically includes `uProjectionMatrix`, `uViewMatrix`, and `uModelMatrix`.
+</ResponseField>
+
+<ResponseField name="instances" type="Map<string, Instance>">
+  Map of all instances managed by the renderer, keyed by string identifiers.
+</ResponseField>
+
+<ResponseField name="shouldRender" type="boolean">
+  Whether the renderer should continue the render loop.
+</ResponseField>
+
+<ResponseField name="devicePixelRatio" type="number" default="1">
+  Pixel ratio for high-DPI displays.
+</ResponseField>
+
+<ResponseField name="clearColor" type="Array<GLclampf>" default="[1, 1, 1, 1]">
+  RGBA clear color values (0-1 range).
+</ResponseField>
+
+<ResponseField name="position" type="{ x: number, y: number, z: number }" default="{ x: 0, y: 0, z: 2 }">
+  Camera position in 3D space.
+</ResponseField>
+
+<ResponseField name="clip" type="Array<number>" default="[0.001, 100]">
+  Near and far clipping plane distances for the projection matrix.
+</ResponseField>
+
+<ResponseField name="debug" type="boolean" default="false">
+  Debug mode flag.
+</ResponseField>
+
+<ResponseField name="uniformMap" type="object">
+  Mapping of uniform types to WebGL uniform setter functions:
+  - `float`: `gl.uniform1f`
+  - `vec2`: `gl.uniform2fv`
+  - `vec3`: `gl.uniform3fv`
+  - `vec4`: `gl.uniform4fv`
+  - `mat2`: `gl.uniformMatrix2fv`
+  - `mat3`: `gl.uniformMatrix3fv`
+  - `mat4`: `gl.uniformMatrix4fv`
+</ResponseField>
+
+<ResponseField name="onRender" type="Function" optional>
+  Callback function executed after each render frame. Receives the renderer instance as an argument.
+</ResponseField>
+
+<ResponseField name="onSetup" type="Function" optional>
+  Callback function executed once before the first render. Receives the WebGL context as an argument.
+</ResponseField>
+
+## Methods
+
+### add()
+
+Adds a new instance to the renderer.
+
+```typescript
+add(key: string, settings: InstanceProps): Instance
+```
+
+<ParamField path="key" type="string" required>
+  Unique identifier for the instance.
+</ParamField>
+
+<ParamField path="settings" type="InstanceProps" required>
+  Configuration for the instance. See [Instance](/api/instance) for details.
+</ParamField>
+
+**Returns:** `Instance` - The created instance.
+
+**Behavior:**
+- Merges renderer uniforms into instance uniforms
+- Assigns WebGL context and uniform map to the instance
+- Stores instance in the instances Map with the provided key
+- If debug mode is enabled, validates vertex and fragment shaders and logs compilation errors
+
+```javascript
+const instance = renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  uniforms: {
+    uTime: { type: 'float', value: 0 }
+  },
+  geometry: {
+    vertices: [{ x: 0, y: 0, z: 0 }]
+  },
+  multiplier: 1000
+});
+```
+
+### remove()
+
+Removes an instance from the renderer and destroys its resources.
+
+```typescript
+remove(key: string): void
+```
+
+<ParamField path="key" type="string" required>
+  The identifier of the instance to remove.
+</ParamField>
+
+**Behavior:**
+- Calls `destroy()` on the instance
+- Removes the instance from the instances Map
+- Returns silently if the instance doesn't exist
+
+```javascript
+renderer.remove('particles');
+```
+
+### resize()
+
+Handles canvas resize and updates projection matrices.
+
+```typescript
+resize(): void
+```
+
+**Behavior:**
+- Updates canvas dimensions based on `clientWidth/Height` and `devicePixelRatio`
+- Recalculates viewport with `gl.viewport()`
+- Regenerates projection, view, and model matrices
+- Updates `uProjectionMatrix`, `uViewMatrix`, and `uModelMatrix` uniforms
+- Automatically called on window resize events and during initialization
+
+```javascript
+// Manually trigger resize
+renderer.resize();
+```
+
+### render()
+
+Renders all instances for a single frame.
+
+```typescript
+render(): void
+```
+
+**Behavior:**
+- Clears the color and depth buffers
+- Iterates through all instances and calls their `render()` method
+- Executes `onRender` callback if defined
+- Requests next animation frame if `shouldRender` is true
+- Automatically called after initialization to start the render loop
+
+```javascript
+// The render loop starts automatically
+// Control it with toggle() instead of calling directly
+```
+
+### toggle()
+
+Starts or stops the render loop.
+
+```typescript
+toggle(shouldRender?: boolean): void
+```
+
+<ParamField path="shouldRender" type="boolean" optional>
+  Whether to start (`true`) or stop (`false`) rendering. If omitted, toggles the current state.
+</ParamField>
+
+**Behavior:**
+- Returns immediately if the requested state matches the current state
+- Updates `shouldRender` property
+- Calls `render()` to restart the loop if enabling rendering
+
+```javascript
+// Stop rendering
+renderer.toggle(false);
+
+// Start rendering
+renderer.toggle(true);
+
+// Toggle current state
+renderer.toggle();
+```
+
+### destroy()
+
+Destroys the renderer and all its instances.
+
+```typescript
+destroy(): void
+```
+
+**Behavior:**
+- Iterates through all instances and calls their `destroy()` method
+- Clears the instances Map
+- Stops the render loop by calling `toggle(false)`
+
+```javascript
+renderer.destroy();
+```
+
+## Type Definitions
+
+```typescript
+interface RendererProps {
+  canvas?: HTMLCanvasElement;
+  context?: object;
+  contextType?: string;
+  settings?: object;
+  debug?: boolean;
+}
+
+interface UniformProps {
+  type: string;
+  value: Array<number>;
+  location?: WebGLUniformLocation;
+}
+```

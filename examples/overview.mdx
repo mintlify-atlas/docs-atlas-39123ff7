@@ -1,0 +1,47 @@
+---
+title: Examples Overview
+description: Explore practical examples demonstrating Phenomenon's capabilities for high-performance particle rendering
+---
+
+Learn how to use Phenomenon through hands-on examples. Each example demonstrates key features and patterns for building high-performance particle systems with WebGL.
+
+<CardGroup cols={2}>
+  <Card title="Basic Particles" icon="circle" href="/examples/basic-particles">
+    Create your first particle system with vertex and fragment shaders
+  </Card>
+  
+  <Card title="Transitions" icon="arrow-right-arrow-left" href="/examples/transitions">
+    Animate particles between positions with easing functions
+  </Card>
+  
+  <Card title="Shapes" icon="shapes" href="/examples/shapes">
+    Render complex shapes using particle multipliers and geometry
+  </Card>
+</CardGroup>
+
+## What You'll Learn
+
+These examples cover the essential patterns for working with Phenomenon:
+
+- **Attributes**: Define per-particle data like position, color, and custom properties
+- **Uniforms**: Share values across all particles for synchronized animations
+- **Shaders**: Write GLSL code to position and color particles on the GPU
+- **Performance**: Leverage multipliers and GPU rendering for millions of particles
+
+## Before You Start
+
+Make sure you have Phenomenon installed:
+
+```bash
+npm install phenomenon
+```
+
+All examples assume you have a canvas element in your HTML:
+
+```html
+<canvas id="canvas"></canvas>
+```
+
+<Tip>
+  Each example includes complete, runnable code with detailed explanations of how the shaders and attributes work together.
+</Tip>

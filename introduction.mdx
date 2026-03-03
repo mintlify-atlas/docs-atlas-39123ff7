@@ -1,0 +1,92 @@
+---
+title: Introduction
+description: A fast 2kB low-level WebGL API for high-performance particle rendering
+---
+
+# Welcome to Phenomenon
+
+Phenomenon is a very small, low-level WebGL library that provides the essentials to deliver a high performance experience. Its core functionality is built around the idea of moving **millions of particles** around using the power of the GPU.
+
+<Note>
+  At just 2kB gzipped with zero dependencies, Phenomenon delivers enterprise-grade WebGL particle rendering without the bloat.
+</Note>
+
+## Why Phenomenon?
+
+Phenomenon was designed from the ground up to be:
+
+<CardGroup cols={2}>
+  <Card title="Blazingly Fast" icon="bolt" href="#performance">
+    GPU-accelerated rendering for millions of particles at 60fps
+  </Card>
+  <Card title="Incredibly Small" icon="feather" href="#key-features">
+    Just 2kB gzipped with zero dependencies
+  </Card>
+  <Card title="Highly Flexible" icon="sliders" href="#architecture">
+    Low-level API gives you complete control over shaders and attributes
+  </Card>
+  <Card title="Easy to Use" icon="rocket" href="/quickstart">
+    Simple API to get started, powerful options when you need them
+  </Card>
+</CardGroup>
+
+## Key Features
+
+- **Small in size** - No dependencies, minimal footprint
+- **GPU based** - Hardware acceleration for maximum performance
+- **Low-level & configurable** - Direct access to WebGL primitives
+- **Dynamic instances** - Add and destroy particle systems on the fly
+- **Dynamic attributes** - Update particle properties in real-time
+- **TypeScript support** - Full type definitions included
+
+## Performance
+
+Phenomenon leverages the GPU to move millions of particles efficiently. By using WebGL buffers and custom shaders, you can create complex particle systems that run at a smooth 60fps even on modest hardware.
+
+<Tip>
+  For optimal performance, use a higher `multiplier` value with fewer instances rather than many instances with low multipliers.
+</Tip>
+
+## Architecture
+
+Phenomenon consists of two main classes:
+
+### Renderer
+
+The main class that manages the WebGL context, canvas, and all particle instances. It handles:
+
+- Setting up the WebGL context
+- Managing projection, view, and model matrices
+- Orchestrating render loops
+- Sharing uniforms across instances
+
+### Instance
+
+Represents a single particle system or drawable object. Each instance has:
+
+- Custom vertex and fragment shaders
+- Attributes (data stored on the GPU)
+- Uniforms (values that can be updated each frame)
+- Geometry data (vertices and normals)
+- A multiplier for creating many particles from one definition
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Phenomenon via npm, yarn, or pnpm
+  </Card>
+  <Card title="Quick Start" icon="bolt" href="/quickstart">
+    Build your first particle system in minutes
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/renderer">
+    Explore the complete API documentation
+  </Card>
+  <Card title="Examples" icon="sparkles" href="/examples/overview">
+    Browse interactive examples and demos
+  </Card>
+</CardGroup>
+
+<Warning>
+  Phenomenon is a low-level library. You'll need basic knowledge of WebGL, shaders (GLSL), and 3D graphics concepts to use it effectively.
+</Warning>

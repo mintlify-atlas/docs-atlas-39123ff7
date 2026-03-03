@@ -1,0 +1,212 @@
+---
+title: Basic Particles
+description: Create a simple particle system with custom colors and positions
+---
+
+This example demonstrates the fundamentals of creating a particle system with Phenomenon. You'll learn how to set up the renderer, define attributes, and write basic vertex and fragment shaders.
+
+## Complete Example
+
+<CodeGroup>
+```javascript index.js
+import Phenomenon from 'phenomenon';
+
+// Create the renderer
+const phenomenon = new Phenomenon({
+  settings: {
+    devicePixelRatio: 1,
+    position: { x: 0, y: 0, z: 2 },
+  },
+});
+
+// Number of particles to render
+const multiplier = 10000;
+
+// Particle attributes
+const attributes = [
+  {
+    name: 'aPosition',
+    data: (i) => [
+      Math.random() * 2 - 1,  // x: -1 to 1
+      Math.random() * 2 - 1,  // y: -1 to 1
+      Math.random() * 2 - 1,  // z: -1 to 1
+    ],
+    size: 3,
+  },
+  {
+    name: 'aColor',
+    data: () => [
+      Math.random(),  // r: 0 to 1
+      Math.random(),  // g: 0 to 1
+      Math.random(),  // b: 0 to 1
+    ],
+    size: 3,
+  },
+];
+
+// Vertex shader
+const vertex = `
+  attribute vec3 aPosition;
+  attribute vec3 aColor;
+  
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uModelMatrix;
+  uniform mat4 uViewMatrix;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    // Transform position to screen space
+    gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+    
+    // Set point size
+    gl_PointSize = 2.0;
+    
+    // Pass color to fragment shader
+    vColor = aColor;
+  }
+`;
+
+// Fragment shader
+const fragment = `
+  precision mediump float;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    // Output the color
+    gl_FragColor = vec4(vColor, 1.0);
+  }
+`;
+
+// Add instance to renderer
+phenomenon.add('particles', {
+  attributes,
+  vertex,
+  fragment,
+  multiplier,
+});
+```
+
+```html index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Basic Particles</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
+```
+</CodeGroup>
+
+## Understanding the Code
+
+### Renderer Setup
+
+```javascript
+const phenomenon = new Phenomenon({
+  settings: {
+    devicePixelRatio: 1,
+    position: { x: 0, y: 0, z: 2 },
+  },
+});
+```
+
+- `devicePixelRatio`: Controls rendering resolution (1 = best performance, higher = sharper)
+- `position`: Camera position in 3D space (z: 2 moves camera back to see particles)
+
+### Attributes
+
+Attributes define per-particle data that gets sent to the GPU:
+
+```javascript
+{
+  name: 'aPosition',           // Variable name in shader
+  data: (i) => [x, y, z],     // Function returning data for each particle
+  size: 3,                     // Number of components (3 for xyz)
+}
+```
+
+<Note>
+  The `data` function is called once for each particle (multiplier times). The index `i` goes from 0 to multiplier-1.
+</Note>
+
+### Vertex Shader
+
+The vertex shader positions each particle in 3D space:
+
+```glsl
+gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+```
+
+- `aPosition`: The particle's position from attributes
+- Matrix multiplication transforms 3D position to 2D screen coordinates
+- `gl_PointSize`: Controls particle size in pixels
+
+### Fragment Shader
+
+The fragment shader determines the color of each particle:
+
+```glsl
+gl_FragColor = vec4(vColor, 1.0);
+```
+
+- `vColor`: Varying interpolated from vertex shader
+- Alpha channel set to 1.0 for fully opaque particles
+
+## Key Concepts
+
+<Tabs>
+  <Tab title="Multiplier">
+    The `multiplier` option determines how many particles are created:
+    
+    ```javascript
+    multiplier: 10000  // Creates 10,000 particles
+    ```
+    
+    Each particle gets its own data from calling the attribute `data` functions.
+  </Tab>
+  
+  <Tab title="Mode">
+    By default, Phenomenon renders particles (GL_POINTS). You can change the rendering mode:
+    
+    ```javascript
+    mode: 0  // Particles (default)
+    mode: 4  // Triangles
+    ```
+  </Tab>
+  
+  <Tab title="Performance">
+    Phenomenon is designed for high performance:
+    
+    - Attributes are computed once on CPU, then stored on GPU
+    - All rendering happens on GPU via shaders
+    - Use lower `devicePixelRatio` for better performance
+    - Fewer instances with higher multipliers = faster
+  </Tab>
+</Tabs>
+
+<Tip>
+  Start with a low multiplier (1000-5000) while developing, then increase it once your shaders are working correctly.
+</Tip>
+
+## Next Steps
+
+- Learn how to [animate particles with transitions](/examples/transitions)
+- Explore [complex shapes and geometry](/examples/shapes)

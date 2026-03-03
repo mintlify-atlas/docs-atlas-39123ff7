@@ -1,0 +1,590 @@
+---
+title: Dynamic Attributes
+description: Update particle attributes in real-time for smooth transitions and interactive effects
+---
+
+Dynamic attributes allow you to update particle data after initialization, enabling smooth transitions, interactive effects, and continuous animations.
+
+## Understanding Dynamic Attributes
+
+Phenomenon provides two methods for updating attributes dynamically:
+
+- `prepareAttribute()`: Recalculates attribute data using the original data function
+- `prepareBuffer()`: Updates the GPU buffer with pre-calculated data
+
+<Note>
+  Dynamic attribute updates happen on the CPU, so be mindful of performance with large particle counts.
+</Note>
+
+## Basic Attribute Update
+
+Update a single attribute with new data.
+
+```javascript
+import Phenomenon from 'phenomenon';
+
+const renderer = new Phenomenon();
+
+const instance = renderer.add('particles', {
+  attributes: [
+    {
+      name: 'aPositionStart',
+      size: 3,
+      data: (i, total) => [
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      ]
+    }
+  ],
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aPositionStart;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPositionStart, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    }
+  `,
+  mode: 0,
+  multiplier: 5000
+});
+
+// Update attribute after 2 seconds
+setTimeout(() => {
+  instance.prepareAttribute({
+    name: 'aPositionStart',
+    size: 3,
+    data: (i, total) => {
+      // New spherical distribution
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+      const radius = 0.5;
+      
+      return [
+        radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.sin(phi) * Math.sin(theta),
+        radius * Math.cos(phi)
+      ];
+    }
+  });
+}, 2000);
+```
+
+## Smooth Transitions
+
+Create smooth transitions between attribute states using start and end positions.
+
+<Steps>
+  <Step title="Set up dual attributes">
+    Define both start and end position attributes:
+
+    ```javascript
+    const instance = renderer.add('transitions', {
+      attributes: [
+        {
+          name: 'aPositionStart',
+          size: 3,
+          data: (i, total) => [
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2,
+            0
+          ]
+        },
+        {
+          name: 'aPositionEnd',
+          size: 3,
+          data: (i, total) => {
+            const angle = (i / total) * Math.PI * 2;
+            return [
+              Math.cos(angle) * 0.5,
+              Math.sin(angle) * 0.5,
+              0
+            ];
+          }
+        }
+      ],
+      uniforms: {
+        uProgress: { type: 'float', value: 0 }
+      },
+      vertex: `
+        attribute vec3 aPosition;
+        attribute vec3 aPositionStart;
+        attribute vec3 aPositionEnd;
+        
+        uniform float uProgress;
+        uniform mat4 uProjectionMatrix;
+        uniform mat4 uModelMatrix;
+        uniform mat4 uViewMatrix;
+        
+        void main() {
+          vec3 pos = mix(aPositionStart, aPositionEnd, uProgress);
+          gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = 2.0;
+        }
+      `,
+      fragment: `
+        precision mediump float;
+        void main() {
+          gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+      `,
+      mode: 0,
+      multiplier: 10000
+    });
+    ```
+  </Step>
+
+  <Step title="Animate progress uniform">
+    Smoothly interpolate between start and end:
+
+    ```javascript
+    instance.onRender = (inst) => {
+      inst.uniforms.uProgress.value += 0.01;
+      
+      if (inst.uniforms.uProgress.value >= 1) {
+        inst.uniforms.uProgress.value = 0;
+      }
+    };
+    ```
+  </Step>
+
+  <Step title="Update to new target">
+    When transition completes, set new start and end positions:
+
+    ```javascript
+    instance.onRender = (inst) => {
+      inst.uniforms.uProgress.value += 0.01;
+      
+      if (inst.uniforms.uProgress.value >= 1) {
+        // Copy end to start
+        const endAttribute = inst.attributes.find(a => a.name === 'aPositionEnd');
+        instance.prepareBuffer({
+          name: 'aPositionStart',
+          size: 3,
+          data: endAttribute.data
+        });
+        
+        // Generate new end positions
+        instance.prepareAttribute({
+          name: 'aPositionEnd',
+          size: 3,
+          data: (i, total) => [
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2
+          ]
+        });
+        
+        inst.uniforms.uProgress.value = 0;
+      }
+    };
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use `prepareBuffer()` with existing data for instant updates without recalculation. This is perfect for copying end positions to start positions.
+</Tip>
+
+## Interactive Updates
+
+Update attributes based on user interaction.
+
+```javascript
+const instance = renderer.add('interactive', {
+  attributes: [
+    {
+      name: 'aTarget',
+      size: 3,
+      data: (i, total) => [0, 0, 0]
+    }
+  ],
+  uniforms: {
+    uProgress: { type: 'float', value: 0 }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aTarget;
+    
+    uniform float uProgress;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vec3 pos = mix(aPosition, aTarget, uProgress);
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 3.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    }
+  `,
+  mode: 0,
+  multiplier: 3000
+});
+
+// Update on mouse move
+renderer.canvas.addEventListener('mousemove', (e) => {
+  const rect = renderer.canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width * 2 - 1;
+  const y = -((e.clientY - rect.top) / rect.height * 2 - 1);
+  
+  instance.prepareAttribute({
+    name: 'aTarget',
+    size: 3,
+    data: (i, total) => {
+      const offset = (Math.random() - 0.5) * 0.2;
+      return [x + offset, y + offset, 0];
+    }
+  });
+  
+  instance.uniforms.uProgress.value = 0;
+});
+
+// Animate to target
+instance.onRender = (inst) => {
+  if (inst.uniforms.uProgress.value < 1) {
+    inst.uniforms.uProgress.value += 0.05;
+  }
+};
+```
+
+## Shape Morphing
+
+Morph between different geometric shapes.
+
+```javascript
+function createCircle(count, radius) {
+  const positions = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    positions.push([
+      Math.cos(angle) * radius,
+      Math.sin(angle) * radius,
+      0
+    ]);
+  }
+  return positions;
+}
+
+function createGrid(count, size) {
+  const positions = [];
+  const cols = Math.ceil(Math.sqrt(count));
+  const spacing = size / cols;
+  
+  for (let i = 0; i < count; i++) {
+    const x = (i % cols) * spacing - size / 2;
+    const y = Math.floor(i / cols) * spacing - size / 2;
+    positions.push([x, y, 0]);
+  }
+  return positions;
+}
+
+function createSphere(count, radius) {
+  const positions = [];
+  for (let i = 0; i < count; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI;
+    positions.push([
+      radius * Math.sin(phi) * Math.cos(theta),
+      radius * Math.sin(phi) * Math.sin(theta),
+      radius * Math.cos(phi)
+    ]);
+  }
+  return positions;
+}
+
+const particleCount = 5000;
+const shapes = [
+  createCircle(particleCount, 0.5),
+  createGrid(particleCount, 1.5),
+  createSphere(particleCount, 0.5)
+];
+
+let currentShapeIndex = 0;
+
+const instance = renderer.add('morph', {
+  attributes: [
+    {
+      name: 'aPositionStart',
+      size: 3,
+      data: (i) => shapes[0][i]
+    },
+    {
+      name: 'aPositionEnd',
+      size: 3,
+      data: (i) => shapes[1][i]
+    }
+  ],
+  uniforms: {
+    uProgress: { type: 'float', value: 0 }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aPositionStart;
+    attribute vec3 aPositionEnd;
+    
+    uniform float uProgress;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      // Smooth easing
+      float t = uProgress * uProgress * (3.0 - 2.0 * uProgress);
+      vec3 pos = mix(aPositionStart, aPositionEnd, t);
+      
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    uniform float uProgress;
+    
+    void main() {
+      vec3 color1 = vec3(1.0, 0.5, 0.2);
+      vec3 color2 = vec3(0.2, 0.5, 1.0);
+      vec3 color = mix(color1, color2, uProgress);
+      
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+  mode: 0,
+  multiplier: particleCount
+});
+
+// Morph between shapes
+function morphToNextShape() {
+  const nextIndex = (currentShapeIndex + 1) % shapes.length;
+  
+  // Update end position to next shape
+  instance.prepareBuffer({
+    name: 'aPositionStart',
+    data: instance.attributes.find(a => a.name === 'aPositionEnd').data
+  });
+  
+  instance.prepareAttribute({
+    name: 'aPositionEnd',
+    size: 3,
+    data: (i) => shapes[nextIndex][i]
+  });
+  
+  currentShapeIndex = nextIndex;
+  instance.uniforms.uProgress.value = 0;
+}
+
+// Animate morphing
+instance.onRender = (inst) => {
+  inst.uniforms.uProgress.value += 0.005;
+  
+  if (inst.uniforms.uProgress.value >= 1) {
+    setTimeout(morphToNextShape, 1000);
+  }
+};
+```
+
+<Warning>
+  Calling `prepareAttribute()` with large particle counts can cause frame drops. For smooth 60 FPS, limit updates to once per transition or use smaller particle counts (< 50,000).
+</Warning>
+
+## Color Transitions
+
+Dynamically update color attributes for visual effects.
+
+```javascript
+const instance = renderer.add('color-transition', {
+  attributes: [
+    {
+      name: 'aColorStart',
+      size: 3,
+      data: (i, total) => [1, 0, 0] // Red
+    },
+    {
+      name: 'aColorEnd',
+      size: 3,
+      data: (i, total) => [0, 0, 1] // Blue
+    }
+  ],
+  uniforms: {
+    uProgress: { type: 'float', value: 0 }
+  },
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aColorStart;
+    attribute vec3 aColorEnd;
+    
+    varying vec3 vColor;
+    
+    uniform float uProgress;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    void main() {
+      vColor = mix(aColorStart, aColorEnd, uProgress);
+      gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(aPosition, 1.0);
+      gl_PointSize = 3.0;
+    }
+  `,
+  fragment: `
+    precision mediump float;
+    varying vec3 vColor;
+    
+    void main() {
+      gl_FragColor = vec4(vColor, 1.0);
+    }
+  `,
+  mode: 0,
+  multiplier: 5000,
+  onRender: (inst) => {
+    inst.uniforms.uProgress.value = (Math.sin(Date.now() * 0.001) + 1) * 0.5;
+  }
+});
+
+// Change colors on click
+renderer.canvas.addEventListener('click', () => {
+  instance.prepareAttribute({
+    name: 'aColorStart',
+    size: 3,
+    data: () => instance.attributes.find(a => a.name === 'aColorEnd').data
+  });
+  
+  instance.prepareAttribute({
+    name: 'aColorEnd',
+    size: 3,
+    data: () => [Math.random(), Math.random(), Math.random()]
+  });
+});
+```
+
+## Performance Considerations
+
+### Batch Updates
+
+```javascript
+// Good: Update multiple attributes at once
+function updateParticles() {
+  instance.prepareAttribute({
+    name: 'aPosition',
+    size: 3,
+    data: (i) => newPositions[i]
+  });
+  
+  instance.prepareAttribute({
+    name: 'aColor',
+    size: 3,
+    data: (i) => newColors[i]
+  });
+}
+
+// Bad: Multiple separate updates per frame
+instance.onRender = () => {
+  instance.prepareAttribute({ /* ... */ }); // Every frame = bad
+};
+```
+
+### Use prepareBuffer for Pre-calculated Data
+
+```javascript
+// Good: Pre-calculate and use prepareBuffer
+const newPositions = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount * 3; i++) {
+  newPositions[i] = Math.random();
+}
+
+instance.prepareBuffer({
+  name: 'aPosition',
+  data: newPositions
+});
+
+// Bad: Calculate in data function
+instance.prepareAttribute({
+  name: 'aPosition',
+  size: 3,
+  data: (i) => [Math.random(), Math.random(), Math.random()]
+});
+```
+
+<Tip>
+  `prepareBuffer()` is significantly faster than `prepareAttribute()` when you already have calculated data. Use it for seamless transitions.
+</Tip>
+
+## Complete Transition System
+
+A production-ready transition system with easing and callbacks.
+
+```javascript
+class ParticleTransition {
+  constructor(instance) {
+    this.instance = instance;
+    this.isTransitioning = false;
+    this.duration = 1.0;
+    this.onComplete = null;
+  }
+  
+  transitionTo(newPositions, duration = 1.0, easing = 'smoothstep') {
+    if (this.isTransitioning) return;
+    
+    this.isTransitioning = true;
+    this.duration = duration;
+    
+    // Copy current positions to start
+    const endAttr = this.instance.attributes.find(a => a.name === 'aPositionEnd');
+    this.instance.prepareBuffer({
+      name: 'aPositionStart',
+      data: endAttr.data
+    });
+    
+    // Set new end positions
+    this.instance.prepareAttribute({
+      name: 'aPositionEnd',
+      size: 3,
+      data: (i) => newPositions[i]
+    });
+    
+    this.instance.uniforms.uProgress.value = 0;
+  }
+  
+  update(deltaTime) {
+    if (!this.isTransitioning) return;
+    
+    this.instance.uniforms.uProgress.value += deltaTime / this.duration;
+    
+    if (this.instance.uniforms.uProgress.value >= 1) {
+      this.instance.uniforms.uProgress.value = 1;
+      this.isTransitioning = false;
+      
+      if (this.onComplete) {
+        this.onComplete();
+      }
+    }
+  }
+}
+
+// Usage
+const transition = new ParticleTransition(instance);
+
+instance.onRender = (inst) => {
+  transition.update(0.016); // ~60 FPS
+};
+
+// Trigger transition
+transition.onComplete = () => console.log('Transition complete!');
+transition.transitionTo(createSphere(5000, 0.5), 2.0);
+```

@@ -1,0 +1,297 @@
+---
+title: Shaders
+description: Writing GLSL vertex and fragment shaders for Phenomenon instances
+---
+
+## Overview
+
+Shaders are GLSL programs that run on the GPU. Every instance requires both a vertex shader and a fragment shader. Phenomenon compiles and links these shaders automatically when you create an instance.
+
+## Shader Compilation
+
+Shaders are compiled internally using the `compileShader()` method:
+
+```typescript
+compileShader(type: number, source: string): WebGLShader
+```
+
+- Vertex shaders use type `35633` (gl.VERTEX_SHADER)
+- Fragment shaders use type `35632` (gl.FRAGMENT_SHADER)
+
+The compiled shaders are attached to a WebGL program, which is then linked and used for rendering.
+
+<Note>
+  Enable debug mode in the renderer to see shader compilation errors in the console:
+  ```javascript
+  const renderer = new Renderer({ debug: true });
+  ```
+</Note>
+
+## Built-in Uniforms
+
+The renderer automatically provides three transformation matrices to every instance:
+
+<ParamField path="uProjectionMatrix" type="mat4">
+  Projection matrix calculated from the camera's field of view (45°) and clipping planes.
+</ParamField>
+
+<ParamField path="uViewMatrix" type="mat4">
+  View matrix (currently identity matrix).
+</ParamField>
+
+<ParamField path="uModelMatrix" type="mat4">
+  Model matrix calculated from the renderer's `position` property.
+</ParamField>
+
+You must declare these in your vertex shader if you want to use standard 3D transformations:
+
+```glsl
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uModelMatrix;
+```
+
+## Built-in Attributes
+
+Depending on your instance's `geometry` configuration, these attributes are automatically created:
+
+<ParamField path="aPosition" type="vec3">
+  Vertex position. Automatically created if `geometry.vertices` is provided.
+</ParamField>
+
+<ParamField path="aNormal" type="vec3">
+  Vertex normal. Automatically created if `geometry.normal` is provided.
+</ParamField>
+
+## Vertex Shader
+
+The vertex shader processes each vertex and determines its final screen position. It must set `gl_Position`.
+
+### Basic Example
+
+```glsl
+precision highp float;
+
+attribute vec3 aPosition;
+
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uModelMatrix;
+
+void main() {
+  gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+}
+```
+
+### Particle Shader
+
+For point rendering (mode 0), you can set `gl_PointSize`:
+
+```glsl
+precision highp float;
+
+attribute vec3 aPosition;
+attribute float aSize;
+
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uModelMatrix;
+
+void main() {
+  gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+  gl_PointSize = aSize;
+}
+```
+
+### Animated Shader
+
+```glsl
+precision highp float;
+
+attribute vec3 aPosition;
+attribute vec3 aOffset;
+
+uniform mat4 uProjectionMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uModelMatrix;
+uniform float uTime;
+
+varying vec3 vPosition;
+
+void main() {
+  vec3 pos = aPosition + aOffset;
+  
+  // Wave animation
+  pos.y += sin(uTime * 2.0 + pos.x * 5.0) * 0.1;
+  
+  vPosition = pos;
+  
+  gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+  gl_PointSize = 3.0;
+}
+```
+
+## Fragment Shader
+
+The fragment shader determines the color of each pixel. It must set `gl_FragColor`.
+
+### Basic Example
+
+```glsl
+precision highp float;
+
+void main() {
+  gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+```
+
+### Using Varyings
+
+```glsl
+precision highp float;
+
+varying vec3 vPosition;
+
+void main() {
+  // Color based on position
+  vec3 color = normalize(vPosition) * 0.5 + 0.5;
+  gl_FragColor = vec4(color, 1.0);
+}
+```
+
+### Particle with Fade
+
+```glsl
+precision highp float;
+
+void main() {
+  // Distance from center of point
+  vec2 center = gl_PointCoord - 0.5;
+  float dist = length(center);
+  
+  // Discard pixels outside circle
+  if (dist > 0.5) discard;
+  
+  // Fade towards edges
+  float alpha = 1.0 - (dist * 2.0);
+  
+  gl_FragColor = vec4(1.0, 0.5, 0.0, alpha);
+}
+```
+
+### Lighting Example
+
+```glsl
+precision highp float;
+
+varying vec3 vNormal;
+
+uniform vec3 uLightDirection;
+
+void main() {
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(uLightDirection);
+  
+  // Diffuse lighting
+  float diffuse = max(dot(normal, lightDir), 0.0);
+  
+  // Ambient + diffuse
+  vec3 ambient = vec3(0.2);
+  vec3 color = ambient + vec3(1.0, 0.8, 0.6) * diffuse;
+  
+  gl_FragColor = vec4(color, 1.0);
+}
+```
+
+## Complete Example
+
+```javascript
+const vertexShader = `
+  precision highp float;
+  
+  attribute vec3 aPosition;
+  attribute vec3 aVelocity;
+  attribute float aPhase;
+  
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uViewMatrix;
+  uniform mat4 uModelMatrix;
+  uniform float uTime;
+  
+  varying float vLife;
+  
+  void main() {
+    // Calculate particle position over time
+    vec3 pos = aPosition + aVelocity * uTime;
+    
+    // Oscillate
+    pos.y += sin(uTime * 3.0 + aPhase) * 0.2;
+    
+    // Life factor
+    vLife = mod(uTime * 0.5 + aPhase, 1.0);
+    
+    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+    gl_PointSize = mix(8.0, 2.0, vLife);
+  }
+`;
+
+const fragmentShader = `
+  precision highp float;
+  
+  varying float vLife;
+  
+  void main() {
+    // Circular particle
+    vec2 center = gl_PointCoord - 0.5;
+    float dist = length(center);
+    if (dist > 0.5) discard;
+    
+    // Fade in/out
+    float alpha = (1.0 - dist * 2.0) * (1.0 - vLife);
+    
+    // Color gradient
+    vec3 color = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.5), vLife);
+    
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  mode: 0,
+  multiplier: 5000,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  },
+  attributes: [
+    {
+      name: 'aVelocity',
+      size: 3,
+      data: () => [
+        (Math.random() - 0.5) * 0.2,
+        Math.random() * 0.3,
+        (Math.random() - 0.5) * 0.2
+      ]
+    },
+    {
+      name: 'aPhase',
+      size: 1,
+      data: () => [Math.random() * Math.PI * 2]
+    }
+  ]
+});
+```
+
+<Warning>
+  Always include the precision qualifier (`precision highp float;`) at the top of your shaders. Some platforms require it.
+</Warning>
+
+## Shader Constants
+
+Phenomenon uses numeric constants for shader types:
+
+- `35633` - VERTEX_SHADER (gl.VERTEX_SHADER)
+- `35632` - FRAGMENT_SHADER (gl.FRAGMENT_SHADER)
+
+You don't need to worry about these when using the library - they're handled internally during compilation.

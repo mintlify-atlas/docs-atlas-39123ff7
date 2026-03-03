@@ -1,0 +1,387 @@
+---
+title: Uniforms
+description: Shader uniforms for passing dynamic data to the GPU
+---
+
+## Overview
+
+Uniforms are global variables passed to shaders that remain constant for all vertices/fragments in a single draw call. Unlike attributes, which vary per vertex, uniforms are the same across the entire render. They're ideal for animation time, mouse position, colors, and other dynamic values.
+
+## Uniform Configuration
+
+```typescript
+interface UniformProps {
+  type: string;
+  value: Array<number>;
+  location?: WebGLUniformLocation;
+}
+```
+
+<ParamField path="type" type="string" required>
+  GLSL uniform type. Supported types:
+  - `'float'` - Single float value
+  - `'vec2'` - 2D vector
+  - `'vec3'` - 3D vector
+  - `'vec4'` - 4D vector
+  - `'mat2'` - 2×2 matrix
+  - `'mat3'` - 3×3 matrix
+  - `'mat4'` - 4×4 matrix
+</ParamField>
+
+<ParamField path="value" type="Array<number>" required>
+  Array of numbers matching the uniform type:
+  - `float`: `[1.0]`
+  - `vec2`: `[1.0, 2.0]`
+  - `vec3`: `[1.0, 2.0, 3.0]`
+  - `vec4`: `[1.0, 2.0, 3.0, 4.0]`
+  - `mat2`: `[1, 0, 0, 1]` (4 values)
+  - `mat3`: `[1, 0, 0, 0, 1, 0, 0, 0, 1]` (9 values)
+  - `mat4`: `[...]` (16 values)
+</ParamField>
+
+<ParamField path="location" type="WebGLUniformLocation">
+  Uniform location in the shader program. Automatically set by Phenomenon during `prepareUniforms()`.
+</ParamField>
+
+## Uniform Declaration
+
+Define uniforms when creating an instance:
+
+```javascript
+renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  uniforms: {
+    uTime: { type: 'float', value: [0] },
+    uMouse: { type: 'vec2', value: [0, 0] },
+    uColor: { type: 'vec3', value: [1, 0, 0] },
+    uOpacity: { type: 'float', value: [1] }
+  }
+});
+```
+
+In your shader:
+
+```glsl
+uniform float uTime;
+uniform vec2 uMouse;
+uniform vec3 uColor;
+uniform float uOpacity;
+```
+
+## Built-in Renderer Uniforms
+
+The renderer automatically provides these transformation matrices to every instance:
+
+<ParamField path="uProjectionMatrix" type="mat4">
+  Projection matrix for perspective transformation. Calculated from:
+  - Field of view: 45°
+  - Aspect ratio: canvas width/height
+  - Clipping planes: `renderer.clip` (default `[0.001, 100]`)
+</ParamField>
+
+<ParamField path="uViewMatrix" type="mat4">
+  View matrix (currently identity matrix).
+</ParamField>
+
+<ParamField path="uModelMatrix" type="mat4">
+  Model matrix calculated from `renderer.position`.
+</ParamField>
+
+These are injected into every instance during `renderer.add()` and updated during `renderer.resize()`.
+
+## Updating Uniforms
+
+Uniforms can be updated at any time by modifying the `value` array:
+
+### In onRender Hook
+
+```javascript
+const particles = renderer.add('particles', {
+  vertex: vertexShader,
+  fragment: fragmentShader,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  }
+});
+
+particles.onRender = (instance) => {
+  instance.uniforms.uTime.value[0] = performance.now() * 0.001;
+};
+```
+
+### In Renderer onRender Hook
+
+```javascript
+const renderer = new Renderer({
+  settings: {
+    onRender: (renderer) => {
+      renderer.instances.forEach(instance => {
+        if (instance.uniforms.uTime) {
+          instance.uniforms.uTime.value[0] = performance.now() * 0.001;
+        }
+      });
+    }
+  }
+});
+```
+
+### Externally
+
+```javascript
+const particles = renderer.add('particles', { /* ... */ });
+
+// Update from anywhere
+function animate() {
+  particles.uniforms.uTime.value[0] = performance.now() * 0.001;
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+<Warning>
+  Always modify the existing array, don't replace it. This works:
+  ```javascript
+  instance.uniforms.uTime.value[0] = 1.0; // ✓
+  ```
+  This doesn't:
+  ```javascript
+  instance.uniforms.uTime.value = [1.0]; // ✗ (location lost)
+  ```
+</Warning>
+
+## Uniform Mapping
+
+Phenomenon uses a `uniformMap` object to efficiently set uniform values. The map is created in the Renderer constructor:
+
+```javascript
+this.uniformMap = {
+  float: (loc, val) => gl.uniform1f(loc, val),
+  vec2: (loc, val) => gl.uniform2fv(loc, val),
+  vec3: (loc, val) => gl.uniform3fv(loc, val),
+  vec4: (loc, val) => gl.uniform4fv(loc, val),
+  mat2: (loc, val) => gl.uniformMatrix2fv(loc, false, val),
+  mat3: (loc, val) => gl.uniformMatrix3fv(loc, false, val),
+  mat4: (loc, val) => gl.uniformMatrix4fv(loc, false, val)
+};
+```
+
+During rendering, uniforms are uploaded to the GPU in `instance.render()`:
+
+```javascript
+Object.keys(uniforms).forEach(key => {
+  const { type, location, value } = uniforms[key];
+  this.uniformMap[type](location, value);
+});
+```
+
+## Examples
+
+### Time-based Animation
+
+```javascript
+const instance = renderer.add('particles', {
+  vertex: `
+    uniform float uTime;
+    attribute vec3 aPosition;
+    
+    void main() {
+      vec3 pos = aPosition;
+      pos.y += sin(uTime + pos.x * 5.0) * 0.1;
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragment: `/* ... */`,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  }
+});
+
+instance.onRender = (inst) => {
+  inst.uniforms.uTime.value[0] = performance.now() * 0.001;
+};
+```
+
+### Mouse Interaction
+
+```javascript
+const mouse = { x: 0, y: 0 };
+
+canvas.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+renderer.add('particles', {
+  vertex: `
+    uniform vec2 uMouse;
+    attribute vec3 aPosition;
+    
+    void main() {
+      vec3 pos = aPosition;
+      vec2 toMouse = uMouse - pos.xy;
+      float dist = length(toMouse);
+      pos.xy += normalize(toMouse) * (1.0 - smoothstep(0.0, 0.5, dist)) * 0.2;
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragment: `/* ... */`,
+  uniforms: {
+    uMouse: { type: 'vec2', value: [0, 0] }
+  },
+  onRender: (inst) => {
+    inst.uniforms.uMouse.value[0] = mouse.x;
+    inst.uniforms.uMouse.value[1] = mouse.y;
+  }
+});
+```
+
+### Color Control
+
+```javascript
+const instance = renderer.add('mesh', {
+  vertex: `/* ... */`,
+  fragment: `
+    precision highp float;
+    uniform vec3 uColor;
+    uniform float uOpacity;
+    
+    void main() {
+      gl_FragColor = vec4(uColor, uOpacity);
+    }
+  `,
+  uniforms: {
+    uColor: { type: 'vec3', value: [1, 0.5, 0] },
+    uOpacity: { type: 'float', value: [1] }
+  }
+});
+
+// Change color
+instance.uniforms.uColor.value = [0, 1, 0.5];
+
+// Fade out
+instance.onRender = (inst) => {
+  inst.uniforms.uOpacity.value[0] *= 0.99;
+};
+```
+
+### Resolution/Aspect Ratio
+
+```javascript
+const renderer = new Renderer({
+  settings: {
+    onRender: (renderer) => {
+      const width = renderer.canvas.width;
+      const height = renderer.canvas.height;
+      
+      renderer.instances.forEach(instance => {
+        if (instance.uniforms.uResolution) {
+          instance.uniforms.uResolution.value[0] = width;
+          instance.uniforms.uResolution.value[1] = height;
+        }
+      });
+    }
+  }
+});
+
+renderer.add('fullscreen', {
+  vertex: `/* ... */`,
+  fragment: `
+    precision highp float;
+    uniform vec2 uResolution;
+    
+    void main() {
+      vec2 uv = gl_FragCoord.xy / uResolution;
+      gl_FragColor = vec4(uv, 0.0, 1.0);
+    }
+  `,
+  uniforms: {
+    uResolution: { type: 'vec2', value: [0, 0] }
+  }
+});
+```
+
+### Multiple Uniforms
+
+```javascript
+const particles = renderer.add('particles', {
+  vertex: `
+    precision highp float;
+    
+    attribute vec3 aPosition;
+    attribute vec3 aOffset;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uViewMatrix;
+    uniform mat4 uModelMatrix;
+    uniform float uTime;
+    uniform vec3 uGravity;
+    uniform float uSpeed;
+    uniform float uScale;
+    
+    void main() {
+      vec3 pos = aPosition * uScale + aOffset;
+      pos += uGravity * uTime * uTime;
+      pos = mod(pos + 5.0, 10.0) - 5.0;
+      
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+      gl_PointSize = 3.0;
+    }
+  `,
+  fragment: `
+    precision highp float;
+    uniform vec4 uColor;
+    
+    void main() {
+      gl_FragColor = uColor;
+    }
+  `,
+  multiplier: 5000,
+  uniforms: {
+    uTime: { type: 'float', value: [0] },
+    uGravity: { type: 'vec3', value: [0, -0.1, 0] },
+    uSpeed: { type: 'float', value: [1] },
+    uScale: { type: 'float', value: [1] },
+    uColor: { type: 'vec4', value: [1, 0.5, 0, 1] }
+  }
+});
+
+particles.onRender = (inst) => {
+  inst.uniforms.uTime.value[0] += 0.016 * inst.uniforms.uSpeed.value[0];
+};
+```
+
+## Shared vs Instance Uniforms
+
+Uniforms can be shared across instances or unique to each:
+
+```javascript
+// Shared uniform in renderer
+renderer.add('instance1', {
+  vertex: `uniform float uTime; /* ... */`,
+  fragment: `/* ... */`,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  }
+});
+
+renderer.add('instance2', {
+  vertex: `uniform float uTime; /* ... */`,
+  fragment: `/* ... */`,
+  uniforms: {
+    uTime: { type: 'float', value: [0] } // Same name, shared value
+  }
+});
+
+// Update both at once
+renderer.onRender = (r) => {
+  const time = performance.now() * 0.001;
+  r.instances.forEach(instance => {
+    instance.uniforms.uTime.value[0] = time;
+  });
+};
+```
+
+<Note>
+  The renderer's uniforms (projection/view/model matrices) are automatically merged into each instance's uniforms during `renderer.add()`.
+</Note>

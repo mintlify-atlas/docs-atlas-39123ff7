@@ -1,0 +1,344 @@
+---
+title: Particle Transitions
+description: Animate particles between positions using uniforms and easing functions
+---
+
+This example shows how to create smooth transitions between particle positions using uniforms and custom easing functions in your shaders.
+
+## Complete Example
+
+<CodeGroup>
+```javascript index.js
+import Phenomenon from 'phenomenon';
+
+// Helper function for random values
+const getRandom = (value) => {
+  const floor = -value;
+  return floor + Math.random() * value * 2;
+};
+
+// Create the renderer
+const phenomenon = new Phenomenon({
+  settings: {
+    devicePixelRatio: 1,
+    position: { x: 0, y: 0, z: 2.5 },
+  },
+});
+
+const multiplier = 5000;
+const duration = 0.8;  // Transition duration as percentage
+const step = 0.005;    // Progress increment per frame
+
+// Define start and end positions
+const start = {
+  x: getRandom(0.5),
+  y: getRandom(0.5),
+  z: getRandom(0.5),
+};
+
+const end = {
+  x: getRandom(0.5),
+  y: getRandom(0.5),
+  z: getRandom(0.5),
+};
+
+// Particle attributes with start and end positions
+const attributes = [
+  {
+    name: 'aPositionStart',
+    data: () => [
+      start.x + getRandom(0.1),
+      start.y + getRandom(0.1),
+      start.z + getRandom(0.1),
+    ],
+    size: 3,
+  },
+  {
+    name: 'aPositionEnd',
+    data: () => [
+      end.x + getRandom(0.1),
+      end.y + getRandom(0.1),
+      end.z + getRandom(0.1),
+    ],
+    size: 3,
+  },
+  {
+    name: 'aColor',
+    data: () => [0.2, 0.5, 1.0],  // Blue color
+    size: 3,
+  },
+  {
+    name: 'aOffset',
+    // Stagger the start time for each particle
+    data: (i) => [i * ((1 - duration) / (multiplier - 1))],
+    size: 1,
+  },
+];
+
+// Uniforms to control animation
+const uniforms = {
+  uProgress: {
+    type: 'float',
+    value: 0.0,
+  },
+};
+
+// Vertex shader with easing function
+const vertex = `
+  attribute vec3 aPositionStart;
+  attribute vec3 aPositionEnd;
+  attribute vec3 aColor;
+  attribute float aOffset;
+  
+  uniform float uProgress;
+  uniform mat4 uProjectionMatrix;
+  uniform mat4 uModelMatrix;
+  uniform mat4 uViewMatrix;
+  
+  varying vec3 vColor;
+  
+  // Ease in-out quintic function
+  float easeInOutQuint(float t) {
+    return t < 0.5 
+      ? 16.0 * t * t * t * t * t 
+      : 1.0 + 16.0 * (--t) * t * t * t * t;
+  }
+  
+  void main() {
+    // Calculate progress for this particle
+    float tProgress = easeInOutQuint(
+      min(1.0, max(0.0, (uProgress - aOffset)) / ${duration})
+    );
+    
+    // Interpolate between start and end positions
+    vec3 newPosition = mix(aPositionStart, aPositionEnd, tProgress);
+    
+    // Transform to screen space
+    gl_Position = uProjectionMatrix * uModelMatrix * uViewMatrix * vec4(newPosition, 1.0);
+    gl_PointSize = 2.0;
+    
+    vColor = aColor;
+  }
+`;
+
+// Fragment shader
+const fragment = `
+  precision mediump float;
+  
+  varying vec3 vColor;
+  
+  void main() {
+    gl_FragColor = vec4(vColor, 1.0);
+  }
+`;
+
+// Track animation direction
+let forward = true;
+
+// Add instance with animation hook
+phenomenon.add('transition', {
+  attributes,
+  vertex,
+  fragment,
+  uniforms,
+  multiplier,
+  onRender: (instance) => {
+    // Update progress
+    instance.uniforms.uProgress.value += forward ? step : -step;
+    
+    // Reverse direction at endpoints
+    if (instance.uniforms.uProgress.value >= 1.0) {
+      forward = false;
+    } else if (instance.uniforms.uProgress.value <= 0.0) {
+      forward = true;
+    }
+  },
+});
+```
+
+```html index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Particle Transitions</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
+```
+</CodeGroup>
+
+## Understanding Transitions
+
+### Uniforms for Animation
+
+Uniforms are values shared across all particles that can be updated every frame:
+
+```javascript
+const uniforms = {
+  uProgress: {
+    type: 'float',
+    value: 0.0,  // 0.0 = start, 1.0 = end
+  },
+};
+```
+
+Update uniforms in the `onRender` hook:
+
+```javascript
+onRender: (instance) => {
+  instance.uniforms.uProgress.value += 0.01;
+}
+```
+
+### Staggered Animation
+
+The `aOffset` attribute creates a wave effect by staggering when each particle starts moving:
+
+```javascript
+{
+  name: 'aOffset',
+  data: (i) => [i * ((1 - duration) / (multiplier - 1))],
+  size: 1,
+}
+```
+
+- Particle 0 starts at progress 0.0
+- Particle 1 starts slightly later
+- Last particle starts at progress 0.2 (when duration is 0.8)
+
+### Easing Function
+
+The quintic easing function creates smooth acceleration and deceleration:
+
+```glsl
+float easeInOutQuint(float t) {
+  return t < 0.5 
+    ? 16.0 * t * t * t * t * t 
+    : 1.0 + 16.0 * (--t) * t * t * t * t;
+}
+```
+
+<Tabs>
+  <Tab title="Linear">
+    Without easing, particles move at constant speed:
+    
+    ```glsl
+    vec3 newPosition = mix(aPositionStart, aPositionEnd, tProgress);
+    ```
+  </Tab>
+  
+  <Tab title="Ease In-Out">
+    With easing, particles start slow, speed up, then slow down:
+    
+    ```glsl
+    float eased = easeInOutQuint(tProgress);
+    vec3 newPosition = mix(aPositionStart, aPositionEnd, eased);
+    ```
+  </Tab>
+  
+  <Tab title="Custom Easing">
+    Create your own easing functions:
+    
+    ```glsl
+    // Ease out cubic
+    float easeOutCubic(float t) {
+      return 1.0 - pow(1.0 - t, 3.0);
+    }
+    
+    // Elastic
+    float easeOutElastic(float t) {
+      float c4 = (2.0 * 3.14159) / 3.0;
+      return pow(2.0, -10.0 * t) * sin((t * 10.0 - 0.75) * c4) + 1.0;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Position Interpolation
+
+The `mix()` function linearly interpolates between two values:
+
+```glsl
+vec3 newPosition = mix(aPositionStart, aPositionEnd, tProgress);
+```
+
+- When `tProgress = 0.0`: `newPosition = aPositionStart`
+- When `tProgress = 0.5`: `newPosition` is halfway between
+- When `tProgress = 1.0`: `newPosition = aPositionEnd`
+
+## Dynamic Transitions
+
+Create continuous transitions by updating attributes:
+
+```javascript
+onRender: (instance) => {
+  instance.uniforms.uProgress.value += step;
+  
+  if (instance.uniforms.uProgress.value >= 1.0) {
+    // Calculate new end position
+    const newEnd = {
+      x: getRandom(0.5),
+      y: getRandom(0.5),
+      z: getRandom(0.5),
+    };
+    
+    // Use current end as new start
+    instance.prepareBuffer({
+      name: 'aPositionStart',
+      data: instance.attributes[1].data,  // Copy aPositionEnd data
+      size: 3,
+    });
+    
+    // Generate new end positions
+    instance.prepareAttribute({
+      name: 'aPositionEnd',
+      data: () => [
+        newEnd.x + getRandom(0.1),
+        newEnd.y + getRandom(0.1),
+        newEnd.z + getRandom(0.1),
+      ],
+      size: 3,
+    });
+    
+    // Reset progress
+    instance.uniforms.uProgress.value = 0.0;
+  }
+}
+```
+
+<Note>
+  Updating attributes is computed on CPU and can impact performance with many particles. Use `prepareBuffer()` to copy existing GPU data when possible.
+</Note>
+
+## Performance Tips
+
+- **Uniforms**: Updating uniforms is very fast (GPU-only operation)
+- **Attributes**: Updating attributes requires CPU computation
+- **Static data**: Use attributes for data that doesn't change
+- **Dynamic data**: Use uniforms for values that change every frame
+
+<Tip>
+  For continuous animations, consider using time-based functions instead of updating attributes. Pass a `uTime` uniform and calculate positions mathematically in the shader.
+</Tip>
+
+## Next Steps
+
+- Explore [complex shapes and geometry](/examples/shapes)
+- Return to [examples overview](/examples/overview)

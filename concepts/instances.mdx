@@ -1,0 +1,266 @@
+---
+title: Instances
+description: Instance class that represents a renderable object with shaders, geometry, and attributes
+---
+
+## Overview
+
+An `Instance` represents a single renderable object in Phenomenon. Each instance has its own shaders, attributes, geometry, and uniforms. Instances are created through the `Renderer.add()` method.
+
+## Configuration
+
+Instances are configured through the `InstanceProps` object:
+
+```typescript
+interface InstanceProps {
+  vertex?: string;
+  fragment?: string;
+  geometry?: GeometryProps;
+  attributes?: Array<AttributeProps>;
+  uniforms: { [key: string]: UniformProps };
+  mode?: number;
+  modifiers?: object;
+  multiplier?: number;
+}
+```
+
+<ParamField path="vertex" type="string" required>
+  GLSL vertex shader source code.
+</ParamField>
+
+<ParamField path="fragment" type="string" required>
+  GLSL fragment shader source code.
+</ParamField>
+
+<ParamField path="uniforms" type="object" required>
+  Shader uniforms. See [Uniforms](/concepts/uniforms) for details.
+  ```typescript
+  {
+    uTime: { type: 'float', value: [0] },
+    uColor: { type: 'vec3', value: [1, 0, 0] }
+  }
+  ```
+</ParamField>
+
+<ParamField path="geometry" type="GeometryProps" default="{ vertices: [{ x: 0, y: 0, z: 0 }] }">
+  Geometry data with vertex positions and optionally normals:
+  ```typescript
+  {
+    vertices: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }],
+    normal: [{ x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 0 }]
+  }
+  ```
+</ParamField>
+
+<ParamField path="attributes" type="Array<AttributeProps>" default="[]">
+  Custom vertex attributes beyond position and normal. See [Attributes](/concepts/attributes) for details.
+</ParamField>
+
+<ParamField path="mode" type="number" default="0">
+  WebGL drawing mode. Defaults to `gl.POINTS` (0). Common values:
+  - `0` - POINTS
+  - `1` - LINES
+  - `4` - TRIANGLES
+</ParamField>
+
+<ParamField path="multiplier" type="number" default="1">
+  Number of times to repeat the geometry. Used for instanced rendering (e.g., particle systems).
+</ParamField>
+
+<ParamField path="modifiers" type="object" default="{}">
+  Functions to modify attribute values during buffer preparation. Keys match attribute names.
+  ```typescript
+  {
+    aPosition: (data, vertexIndex, componentIndex, instance) => {
+      return Math.random() * 2 - 1;
+    }
+  }
+  ```
+</ParamField>
+
+## Properties
+
+<ParamField path="gl" type="WebGLRenderingContext">
+  The WebGL context (injected by renderer).
+</ParamField>
+
+<ParamField path="program" type="WebGLProgram">
+  The compiled shader program.
+</ParamField>
+
+<ParamField path="buffers" type="Array<BufferProps>">
+  WebGL buffers for all attributes.
+</ParamField>
+
+<ParamField path="uniformMap" type="object">
+  Uniform setter functions (injected by renderer).
+</ParamField>
+
+<ParamField path="onRender" type="Function">
+  Optional callback invoked after rendering this instance:
+  ```typescript
+  instance.onRender = (instance) => {
+    // Update uniforms, etc.
+  };
+  ```
+</ParamField>
+
+## Methods
+
+### render()
+
+Render the instance. Called automatically by the renderer.
+
+```typescript
+render(renderUniforms: object): void
+```
+
+<ParamField path="renderUniforms" type="object">
+  Shared uniforms from the renderer (projection, view, model matrices).
+</ParamField>
+
+<Warning>
+  Don't call this method directly. The renderer manages the render cycle.
+</Warning>
+
+### destroy()
+
+Clean up WebGL resources (buffers and program).
+
+```typescript
+destroy(): void
+```
+
+<Note>
+  This is called automatically when using `renderer.remove()`. Only call manually if you created the instance yourself.
+</Note>
+
+## Internal Methods
+
+These methods are called automatically during instance creation:
+
+### prepareProgram()
+
+Compile shaders and link the WebGL program.
+
+### prepareUniforms()
+
+Get uniform locations from the shader program.
+
+### prepareAttributes()
+
+Process geometry and create buffer attributes. Automatically adds:
+- `aPosition` (vec3) if geometry has `vertices`
+- `aNormal` (vec3) if geometry has `normal`
+
+### prepareAttribute()
+
+Prepare a single attribute, creating the buffer data array based on geometry and multiplier.
+
+### prepareBuffer()
+
+Create and bind a WebGL buffer for an attribute.
+
+### compileShader()
+
+Compile a single shader (vertex or fragment).
+
+```typescript
+compileShader(type: number, source: string): WebGLShader
+```
+
+## Example: Particle System
+
+```javascript
+const particles = renderer.add('particles', {
+  vertex: `
+    precision highp float;
+    
+    attribute vec3 aPosition;
+    attribute vec3 aOffset;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    uniform float uTime;
+    
+    void main() {
+      vec3 pos = aPosition + aOffset;
+      pos.y += sin(uTime + aOffset.x) * 0.1;
+      
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(pos, 1.0);
+      gl_PointSize = 2.0;
+    }
+  `,
+  fragment: `
+    precision highp float;
+    
+    void main() {
+      gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);
+    }
+  `,
+  mode: 0, // POINTS
+  multiplier: 10000,
+  uniforms: {
+    uTime: { type: 'float', value: [0] }
+  },
+  attributes: [
+    {
+      name: 'aOffset',
+      size: 3,
+      data: (i, total) => [Math.random() * 4 - 2, Math.random() * 4 - 2, Math.random() * 4 - 2]
+    }
+  ]
+});
+
+particles.onRender = (instance) => {
+  instance.uniforms.uTime.value[0] = performance.now() * 0.001;
+};
+```
+
+## Example: Triangle Mesh
+
+```javascript
+const mesh = renderer.add('mesh', {
+  vertex: `
+    attribute vec3 aPosition;
+    attribute vec3 aNormal;
+    
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    
+    varying vec3 vNormal;
+    
+    void main() {
+      vNormal = aNormal;
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+    }
+  `,
+  fragment: `
+    precision highp float;
+    
+    varying vec3 vNormal;
+    
+    void main() {
+      vec3 light = normalize(vec3(1.0, 1.0, 1.0));
+      float diffuse = max(dot(vNormal, light), 0.0);
+      gl_FragColor = vec4(vec3(diffuse), 1.0);
+    }
+  `,
+  geometry: {
+    vertices: [
+      { x: -1, y: -1, z: 0 },
+      { x: 1, y: -1, z: 0 },
+      { x: 0, y: 1, z: 0 }
+    ],
+    normal: [
+      { x: 0, y: 0, z: 1 },
+      { x: 0, y: 0, z: 1 },
+      { x: 0, y: 0, z: 1 }
+    ]
+  },
+  mode: 4, // TRIANGLES
+  uniforms: {}
+});
+```
